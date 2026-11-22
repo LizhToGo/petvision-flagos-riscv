@@ -15,13 +15,12 @@
 | 真图 `Abyssinian_201.jpg` | ✅ `Abyssinian`，p=`0.997643857`，max_abs_err `1.05e-05` | `results/k1/native_image.json` |
 | `aten._softmax` 厂商 kernel | ✅ 数值 `5.96e-08`，真实 kernel launch 1 次 | `results/k1/ops_softmax.json` |
 | 真图 → 37 类概率（仅厂商 softmax） | ✅ 1 次 `softmax_kernel_spacemit`，概率差 `1.42e-14`，Top-1 一致 | `results/k1/flag_gems_softmax_image.json` |
-| 厂商 `mean.dim`（ResNet 全局池化） | ❌ 固定版编译失败；实验性修正后 launch=1 但输出 NaN | `results/k1/ops_mean_k1_failure.json` |
+| 厂商 `mean.dim`（ResNet 全局池化） | K1 真机修复通过，两项回归测试通过 | [实测数据](results/k1/mean_dim_pr_9773.json) · [FlagGems PR #9773](https://github.com/flagos-ai/FlagGems/pull/9773) |
 | 厂商 `conv2d` kernel | ❌ K1 Triton lowering 明确不支持，最小用例见下 | `results/k1/conv2d_vendor_failure.json` |
 | 通用 FlagGems `conv2d` | ✅ 数值 `9.54e-07`（仅基线，未用于最终推理） | 同上 |
 
-**重要边界**：最终真图推理仍然只有 **`aten._softmax` 后处理**走厂商 kernel；
-53 次卷积、`mean.dim` 全局池化都是**原生 ATen**。这不是“整个模型已用 FlagGems”，
-也不是 U-Net 全系统移植（分割分支未跑，见第 8 节）。
+固定版的真图结果启用厂商 `aten._softmax` 后处理。上游 PR 分支另用同一权重和真图
+验证了厂商 `mean.dim` 全局池化。两次实验的 53 次卷积均由原生 PyTorch 执行。
 
 ## 2. 环境（K1 真机实测）
 
@@ -92,8 +91,7 @@ foreach 算子；这不是 PetVision 的性能/正确性结论。
 * ResNet-50 每前向 **53 次 `aten.convolution`**（53 个 Conv2d 前向钩子也计数为 53）；
 * 37 类分类概率是 **1 次 `aten._softmax`**（`torch.softmax(logits, dim=1)`）。
 
-`mean.dim` 属于模型前向内部、更有价值，但在 K1 上未通过（第 5 节），
-因此最终实证选择**数值已通过、且 PetVision 真实调用**的 `aten._softmax`。
+固定版的 `mean.dim` 遇到第 5 节的故障，因此最初选择 `aten._softmax` 做真图验证。
 注册名使用实现名 `softmax`（固定版 `only_enable` 的 include 语义），
 `torch.softmax` 经 `aten._softmax` 派发到 `_spacemit.ops.softmax`。
 
@@ -177,7 +175,7 @@ this target` 警告（K1 目标缺该特性）。因此该 kernel **不能**作�
 **通用** FlagGems `conv2d` 基线在 K1 上数值正确（max_abs `9.54e-07`，输入
 `1×4×9×7`，stride 2/pad 1），但它不是厂商 kernel，也没有用于最终推理。
 
-### 5.2 厂商 `mean.dim`：编译失败 → 实验性修正后 NaN
+### 5.2 厂商 `mean.dim` 的固定版故障与上游修复
 
 固定版原样（`(1,2048,8,8)`, `dim=[2,3]`, `keepdim=True`）在编译期失败：
 
@@ -189,16 +187,19 @@ re-assigned to fp64 in loop! Please make sure that the type stays consistent.')
 `patches/0003-EXPERIMENTAL-spacemit-mean-dim-k1-does-not-fix.patch`
 加入 `tl.sum(..., dtype=tl.float32)` 与 `padding_option="zero"` 后可以编译，
 真实 launch 计数为 1，但输出为 **NaN**（`1×2048×8×8` 和 `1×2048×1×1` 都错），
-与 fp64 参考 `allclose=false`。单独的 masked-load `tl.sum` 探针在 K1 上数值正确，
-因此**不把根因归给编译器**；该 patch 明确标注“不能作为上游修复”，
-且**最终 venv 已恢复原始 `mean.py`**，不再保留实验性补丁。
+与 fp64 参考 `allclose=false`。后续在 K1 上用独立的程序编号写出内核复现了调度问题。
+512 个程序能写入全部输出，2048 个程序启动返回后，预填值全部保留。
+
+上游补丁将单次启动限制在 512 个程序，并让每个程序按网格步长处理多行。归约使用
+显式 FP32 向量累加和掩码加载，覆盖跨分块的 513 元素尾部。K1 真图前向调用一次厂商
+均值内核。修复版单算子中位时间为 3.186 ms，同机 PyTorch 为 0.867 ms。
+[上游 PR 与复现命令](https://github.com/flagos-ai/FlagGems/pull/9773)
 
 ### 5.3 其它
 
 * 分割分支（U-Net / `ConvTranspose2d`）未移植、未运行；本报告只覆盖最终
   ResNet-50 分类路径。
 * 未做 RVV/SMT 优化；没有可靠热点收益证据。
-* 未向上游提交 PR；只准备了可审查的 softmax 测试补丁。
 
 ## 6. 上游候选（分级）
 
@@ -208,8 +209,8 @@ re-assigned to fp64 in loop! Please make sure that the type stays consistent.')
 | `patches/0001-triton-libdevice-hypot-compat.patch` | ⚠️ 环境兼容 | 仅为固定版在 SpacemiT Triton 上可导入；未证明其他后端需要 |
 | `patches/0003-EXPERIMENTAL-spacemit-mean-dim-k1-does-not-fix.patch` | ❌ 不可提交 | 能过编译但结果 NaN，保留为失败复现 |
 
-`tests/test_mean.py` 未加入失败用例；`mean.dim` 的失败由
-`results/k1/ops_mean_k1_failure.json` 与 `scripts/k1_ops_check.py --only mean` 复现。
+固定版的失败记录在 `results/k1/ops_mean_k1_failure.json`。修复版的两个回归用例位于
+上游 PR 的 `tests/test_mean.py`，PetVision 对照数据见 `results/k1/mean_dim_pr_9773.json`。
 
 ## 7. K1 部署（保留，供验收）
 

@@ -1,0 +1,48 @@
+{
+  "upstream_pr": "https://github.com/flagos-ai/FlagGems/pull/9773",
+  "upstream_base": "43c9cab402f7e286de9cbfc6238ea3e7bfe354cb",
+  "upstream_fix": "cdb08f59d4",
+  "environment": {
+    "board": "SpacemiT K1 / X60",
+    "architecture": "riscv64",
+    "os": "Bianbu 2.3",
+    "torch": "2.8.0+spacemit.0",
+    "triton_distribution": "3.6.0+spacemit.a5",
+    "vendor": "spacemit"
+  },
+  "grid_probe": {
+    "operation": "Write each Triton program ID to a tensor prefilled with 12345.0",
+    "all_output_written": [64, 512],
+    "no_output_written": [640, 768, 1024, 1280, 1536, 2048, 4096]
+  },
+  "mean_dim": {
+    "input_shape": [1, 2048, 8, 8],
+    "dtype": "float32",
+    "dims": [2, 3],
+    "keepdim": true,
+    "seed": 20261123,
+    "baseline_non_finite_in_probe": 243,
+    "fixed_non_finite": 0,
+    "fixed_max_abs_error_vs_pytorch": 5.960464477539063e-8,
+    "warmups_per_path": 5,
+    "alternating_pairs": 20,
+    "native_pytorch_median_ms": 0.867,
+    "patched_flaggems_median_ms": 3.186
+  },
+  "model_acceptance": {
+    "model": "PetVision ResNet-50 FP32",
+    "image": "Abyssinian_201.jpg",
+    "pool_input_shape": [1, 2048, 8, 8],
+    "flag_gems_operator": "mean_dim",
+    "kernel_runs_per_forward": 1,
+    "top1": "Abyssinian",
+    "max_abs_logit_error_vs_native_k1": 9.5367431640625e-7,
+    "max_abs_logit_error_vs_native_x86": 1.049041748046875e-5,
+    "exit_code": 0
+  },
+  "regression": {
+    "command": "python -m pytest -p no:cacheprovider tests/test_mean.py -k test_mean_dim_masked_tiles -q",
+    "passed": 2,
+    "deselected": 83
+  }
+}
