@@ -1,0 +1,138 @@
+{
+  "schema": 1,
+  "kind": "k1_ops_check",
+  "generated_at": "2026-11-22T23:53:20+08:00",
+  "environment": {
+    "python": "3.12.3",
+    "machine": "riscv64",
+    "platform": "Linux-6.6.63-cloud-riscv64-with-glibc2.39",
+    "torch": "2.8.0+spacemit.0",
+    "torch_num_threads": 8,
+    "cpu_count": 8,
+    "affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "env": {
+      "GEMS_VENDOR": "spacemit",
+      "TRITON_CACHE_DIR": "<K1>/triton-cache"
+    },
+    "triton": "3.6.0",
+    "triton_backend": "CPUDriver",
+    "triton_target": "AICPUTarget(backend='cpu', arch='spacemit-a60', warp_size=0, core=4, ai_core=2, arch_id='0xA03C', num_threads=2, force_vector_interleave=2)",
+    "torchvision": "0.23.0",
+    "isa": "rv64imafdcv_zicbom_zicboz_zicntr_zicond_zicsr_zifencei_zihintpause_zihpm_zfh_zfhmin_zca_zcd_zba_zbb_zbc_zbs_zkt_zve32f_zve32x_zve64d_zve64f_zve64x_zvfh_zvfhmin_zvkt_sscofpmf_sstc_svinval_svnapot_svpbmt_ime",
+    "device_tree_model": "spacemit k1-x som board"
+  },
+  "flag_gems": {
+    "version": "0.0.0",
+    "vendor": "spacemit",
+    "device": "cpu",
+    "conv2d_module": "flag_gems.ops.conv2d",
+    "mean_dim_module": "_spacemit.ops.mean",
+    "softmax_module": "_spacemit.ops.softmax"
+  },
+  "softmax": {
+    "shape": [
+      1,
+      37
+    ],
+    "unregistered_dispatch": {
+      "aten._softmax.default": 1
+    },
+    "include": "softmax",
+    "dispatch_attr_module": "_spacemit.ops.softmax",
+    "kernel_runs": 1,
+    "timing_vendor_ms": {
+      "warmup": 3,
+      "repeat": 10,
+      "samples_ms": [
+        0.6088269874453545,
+        0.6554089486598969,
+        0.6478689610958099,
+        0.5715782754123211,
+        0.5516610108315945,
+        0.5529108457267284,
+        0.5707019008696079,
+        0.5483278073370457,
+        0.6289100274443626,
+        0.6477022543549538
+      ],
+      "median_ms": 0.5902026314288378,
+      "min_ms": 0.5483278073370457,
+      "max_ms": 0.6554089486598969
+    },
+    "native_metrics": {
+      "out_shape": [
+        1,
+        37
+      ],
+      "ref_shape": [
+        1,
+        37
+      ],
+      "max_abs_err": 5.960464477539063e-08,
+      "mean_abs_err": 3.479874214610538e-09,
+      "allclose": true,
+      "has_nan": false
+    },
+    "timing_native_ms": {
+      "warmup": 3,
+      "repeat": 10,
+      "samples_ms": [
+        0.0410410575568676,
+        0.04095816984772682,
+        0.0360412523150444,
+        0.03537395969033241,
+        0.03541586920619011,
+        0.03483332693576813,
+        0.033167190849781036,
+        0.03229174762964249,
+        0.03520818427205086,
+        0.033833086490631104
+      ],
+      "median_ms": 0.035291071981191635,
+      "min_ms": 0.03229174762964249,
+      "max_ms": 0.0410410575568676
+    },
+    "vendor_metrics": {
+      "out_shape": [
+        1,
+        37
+      ],
+      "ref_shape": [
+        1,
+        37
+      ],
+      "max_abs_err": 5.960464477539063e-08,
+      "mean_abs_err": 3.505045095005551e-09,
+      "allclose": true,
+      "has_nan": false
+    },
+    "vendor_vs_native": {
+      "out_shape": [
+        1,
+        37
+      ],
+      "ref_shape": [
+        1,
+        37
+      ],
+      "max_abs_err": 9.313225746154785e-10,
+      "mean_abs_err": 2.5170880395012934e-11,
+      "allclose": true,
+      "has_nan": false
+    },
+    "triton_cache": {
+      "root": "<K1>/triton-cache",
+      "new_files": 0,
+      "top_level_entries": []
+    }
+  }
+}

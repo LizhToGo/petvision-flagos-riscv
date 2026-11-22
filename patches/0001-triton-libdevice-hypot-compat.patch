@@ -1,0 +1,24 @@
+--- a/src/flag_gems/ops/_foreach_complex_math.py
++++ b/src/flag_gems/ops/_foreach_complex_math.py
+@@ -13,16 +13,19 @@
+ 
+ import triton
+ import triton.language as tl
++from triton.language.extra import libdevice as _generic_libdevice
+ 
+ from flag_gems.utils import tl_extra_shim
+ 
+ # ``tl`` has no hyperbolic or two-argument-arctangent primitives; the repository
+ # routes those through the libdevice shim, so the complex formulas below use the
+-# same source as the single-tensor operators do.
++# same source as the single-tensor operators do.  Some vendor libdevice shims
++# (the SpacemiT CPU one at triton 3.6.0+spacemit.a5/b1) omit ``hypot``; fall back
++# to the generic libdevice symbol so importing the operator table still works.
+ _sinh = tl_extra_shim.sinh
+ _cosh = tl_extra_shim.cosh
+ _atan2 = tl_extra_shim.atan2
+-_hypot = tl_extra_shim.hypot
++_hypot = getattr(tl_extra_shim, "hypot", _generic_libdevice.hypot)
+ 
+ 
+ @triton.jit

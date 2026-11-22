@@ -1,0 +1,127 @@
+{
+  "schema": 1,
+  "kind": "k1_alternating_ab",
+  "generated_at": "2026-11-23T00:14:36+08:00",
+  "config": {
+    "threads": 8,
+    "pairs": 10,
+    "image": {
+      "kind": "image",
+      "name": "Abyssinian_201.jpg",
+      "sha256": "af5e24d564321c9233c06c02497c08bf164a9a72acf8e8e287ac1bfc6f9cd321",
+      "resize": [
+        256,
+        256
+      ],
+      "resample": "BILINEAR",
+      "color": "RGB",
+      "normalize": "imagenet"
+    },
+    "model": "PetVision ResNet-50 37-class",
+    "registered_scope": [
+      "softmax"
+    ],
+    "hooks": false,
+    "record": false
+  },
+  "samples": [
+    {
+      "pair": 0,
+      "order": "native_first",
+      "native_model_ms": 2318.450666964054,
+      "vendor_model_ms": 2347.6811568252742,
+      "native_softmax_ms": 0.1707039773464203,
+      "vendor_softmax_ms": 1.2302189134061337,
+      "probs_max_abs_diff": 1.4210854715202004e-14
+    },
+    {
+      "pair": 1,
+      "order": "vendor_first",
+      "native_model_ms": 2275.281963404268,
+      "vendor_model_ms": 2221.3131012395024,
+      "native_softmax_ms": 0.11999718844890594,
+      "vendor_softmax_ms": 1.4339638873934746,
+      "probs_max_abs_diff": 1.4210854715202004e-14
+    },
+    {
+      "pair": 2,
+      "order": "native_first",
+      "native_model_ms": 2389.3202538602054,
+      "vendor_model_ms": 2158.326444681734,
+      "native_softmax_ms": 0.10966416448354721,
+      "vendor_softmax_ms": 1.7807045951485634,
+      "probs_max_abs_diff": 1.4210854715202004e-14
+    },
+    {
+      "pair": 3,
+      "order": "vendor_first",
+      "native_model_ms": 2241.7258340865374,
+      "vendor_model_ms": 2259.8820137791336,
+      "native_softmax_ms": 0.10824715718626976,
+      "vendor_softmax_ms": 2.4393959902226925,
+      "probs_max_abs_diff": 1.4210854715202004e-14
+    },
+    {
+      "pair": 4,
+      "order": "native_first",
+      "native_model_ms": 2322.138438001275,
+      "vendor_model_ms": 2197.803128976375,
+      "native_softmax_ms": 0.11341413483023643,
+      "vendor_softmax_ms": 1.0630562901496887,
+      "probs_max_abs_diff": 1.4210854715202004e-14
+    },
+    {
+      "pair": 5,
+      "order": "vendor_first",
+      "native_model_ms": 2325.815918855369,
+      "vendor_model_ms": 2251.2366687878966,
+      "native_softmax_ms": 0.11312216520309448,
+      "vendor_softmax_ms": 1.1519710533320904,
+      "probs_max_abs_diff": 1.4210854715202004e-14
+    },
+    {
+      "pair": 6,
+      "order": "native_first",
+      "native_model_ms": 2153.128553647548,
+      "vendor_model_ms": 2049.991002306342,
+      "native_softmax_ms": 0.11283112689852715,
+      "vendor_softmax_ms": 1.1600540019571781,
+      "probs_max_abs_diff": 1.4210854715202004e-14
+    },
+    {
+      "pair": 7,
+      "order": "vendor_first",
+      "native_model_ms": 2285.696711856872,
+      "vendor_model_ms": 2329.4780291616917,
+      "native_softmax_ms": 0.12283027172088623,
+      "vendor_softmax_ms": 1.3914648443460464,
+      "probs_max_abs_diff": 1.4210854715202004e-14
+    },
+    {
+      "pair": 8,
+      "order": "native_first",
+      "native_model_ms": 2294.1072317771614,
+      "vendor_model_ms": 2330.3514579311013,
+      "native_softmax_ms": 0.10970467701554298,
+      "vendor_softmax_ms": 1.118888147175312,
+      "probs_max_abs_diff": 1.4210854715202004e-14
+    },
+    {
+      "pair": 9,
+      "order": "vendor_first",
+      "native_model_ms": 2483.7929657660425,
+      "vendor_model_ms": 2264.349626842886,
+      "native_softmax_ms": 0.109122134745121,
+      "vendor_softmax_ms": 1.1089718900620937,
+      "probs_max_abs_diff": 1.4210854715202004e-14
+    }
+  ],
+  "medians": {
+    "native_model_ms": 2306.2789493706077,
+    "vendor_model_ms": 2255.559341283515,
+    "native_softmax_ms": 0.11297664605081081,
+    "vendor_softmax_ms": 1.1951364576816559,
+    "max_probs_diff": 1.4210854715202004e-14
+  },
+  "note": "The model forward is native ATen in both arms; only the 37-class softmax differs. Model-forward deltas are not attributable to the operator."
+}

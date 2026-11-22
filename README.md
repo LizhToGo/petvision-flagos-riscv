@@ -1,290 +1,277 @@
-# PetVision × FlagOS（SpacemiT 后端）迁移验证
+# PetVision × FlagOS（SpacemiT K1 真机）迁移验证
 
-把结课项目 **PetVision**（Oxford-IIIT Pet：U-Net 前景分割 + ResNet-50 品种分类）
-迁移到 RISC-V 软件栈的**可复现验证工程**。原课设仓库
-`C:/Users/27978/Desktop/认知科学与类脑计算` 只读使用：不复制其代码、不写入其目录、
-不改动其 Git 状态，也不把权重提交进本仓库。
+把结课项目 **PetVision** 的最终分类器（ResNet-50，37 类，256×256，raw FP32）
+迁移到 RISC-V 真机 **SpacemiT K1 / X60**，并在同一台机器上验证 FlagGems
+`spacemit` 后端的真实 JIT 执行、数值正确性与耗时。
 
-目标后端：
+> 原课设只读仓库：不复制代码、不写入、不改 Git 状态；模型权重只读打开，仓库内没有任何 `.pt/.pth` 或原图。
 
-| 项目 | 版本 / 来源 |
+## 1. 结论（先看这里）
+
+| 项目 | 结果 | 证据 |
+| --- | --- | --- |
+| 原生 PyTorch 真机前向 | ✅ 2115.76 ms/前向；53 次 `aten::conv2d` | `results/k1/native_seed0.json` |
+| 与 x86 参考 logits（seed 0） | ✅ max_abs_err `1.19e-06`，Top-1 都是 `leonberger` | 同上（`checks` 全过） |
+| 真图 `Abyssinian_201.jpg` | ✅ `Abyssinian`，p=`0.997643857`，max_abs_err `1.05e-05` | `results/k1/native_image.json` |
+| `aten._softmax` 厂商 kernel | ✅ 数值 `5.96e-08`，真实 kernel launch 1 次 | `results/k1/ops_softmax.json` |
+| 真图 → 37 类概率（仅厂商 softmax） | ✅ 1 次 `softmax_kernel_spacemit`，概率差 `1.42e-14`，Top-1 一致 | `results/k1/flag_gems_softmax_image.json` |
+| 厂商 `mean.dim`（ResNet 全局池化） | ❌ 固定版编译失败；实验性修正后 launch=1 但输出 NaN | `results/k1/ops_mean_k1_failure.json` |
+| 厂商 `conv2d` kernel | ❌ K1 Triton lowering 明确不支持，最小用例见下 | `results/k1/conv2d_vendor_failure.json` |
+| 通用 FlagGems `conv2d` | ✅ 数值 `9.54e-07`（仅基线，未用于最终推理） | 同上 |
+
+**重要边界**：最终真图推理仍然只有 **`aten._softmax` 后处理**走厂商 kernel；
+53 次卷积、`mean.dim` 全局池化都是**原生 ATen**。这不是“整个模型已用 FlagGems”，
+也不是 U-Net 全系统移植（分割分支未跑，见第 8 节）。
+
+## 2. 环境（K1 真机实测）
+
+| 项目 | 值 |
 | --- | --- |
-| 算子库 | FlagGems，commit `43c9cab402f7e286de9cbfc6238ea3e7bfe354cb`（`third_party/FLAGGEMS_COMMIT.txt`） |
-| 编译器 | FlagTree / Spine-Triton **3.6**（`triton==3.6.0+spacemit.a5`） |
-| 厂商后端 | FlagGems `runtime/backend/_spacemit`（vendor 名 `spacemit`，`GEMS_VENDOR=spacemit`） |
-| 目标硬件 | SpacemiT K3（RISC-V 64，RVV vlen=1024 / elen=64） |
-| 开发环境 | SpacemiT 官方 **x64 emulation** 镜像 `harbor.baai.ac.cn/flagtree/flagtree-spacemit-py312-torch2.10.0-ubuntu24.04:202607-3.6-base`（manifest config digest `sha256:49afe94e8aa50161ab8176b3339169e283654b4064db7ed3c1adfe0d8c2c44b8`） |
+| 硬件 | SpacemiT K1 / X60，rv64imafdcv…zvfh…**ime**，8 核，约 15 GiB 可用 |
+| 系统 | Bianbu 2.3，Linux 6.6.63-cloud，Python 3.12.3 |
+| venv | `$HOME/petvision-k1/venv`（`--without-pip` + 官方 `get-pip.py`） |
+| PyTorch | `2.8.0+spacemit.0`（cp312/linux_riscv64） |
+| torchvision | `0.23.0`（cp312/linux_riscv64） |
+| Triton | `3.6.0+spacemit.a5`；`triton.__version__` 报 `3.6.0` |
+| Triton 驱动 | `CPUDriver`，target `AICPUTarget(arch='spacemit-a60', core=4, ai_core=2, num_threads=2)` |
+| FlagGems | commit `43c9cab402f7e286de9cbfc6238ea3e7bfe354cb`（`0.0.0`，源码安装） |
+| vendor | `GEMS_VENDOR=spacemit`，`flag_gems.device == "cpu"` |
 
-## 1. 结论摘要（先看这里）
+厂商 wheel 缺少的共享库**没有装进系统**：用 `apt-get download` +
+`dpkg -x` 解到 `$HOME/petvision-k1/libs/root`，只通过 `LD_LIBRARY_PATH` 生效：
 
-1. **算子选择有运行证据**：ResNet-50 分类模型每个前向实际调用 `aten::conv2d`
-   **53 次**（`torch.nn.modules.conv.Conv2d` 前向钩子计数，见
-   `results/local_x86_cpu_20261122/model/petvision_forward.json`），权重里 53 个 4 维
-   卷积核全部 `groups=1`；U-Net 同样以 `Conv2d(3,3,padding=1)` 为基本单元。因此
-   Conv2d 是 PetVision 上最有适配价值的候选算子，而不是任意挑选。
-2. **不要盲目取消注释**：`_spacemit/ops/conv2d.py` 从 PR #2527 引入起就存在，但
-   `_spacemit/ops/__init__.py` 里 `from .conv2d import conv2d` 一直是注释状态（同一
-   PR 的 `conv1d` / `thnn_conv2d` / `_conv_depthwise2d` 也是注释）。后果是
-   `aten::conv2d` 在 SpacemiT 上落到**通用 CUDA 取向实现**，而不是厂商融合
-   im2col+GEMM kernel。原因与证据链见第 6 节。
-3. **实现确有缺陷**（修复前）：kernel 完全忽略 `groups` 参数（`_conv_depthwise2d`
-   包装器却按分组语义调用它，会读到越界/错位权重），并且不接受 `"same"/"valid"`
-   字符串 padding（测试直接调用 `flag_gems.conv2d(padding="same")` 会得到
-   `ValueError`）。这些是"静默算错"级别的根因，必须先显式拒绝再导出。
-4. **交付的上游候选补丁**：`patches/0001-spacemit-conv2d-enable-forward-kernel.patch`
-   与 `patches/0002-tests-spacemit-conv2d.patch`。前者导出 conv2d + 显式限制 +
-   测试适配（在 `tests/test_conv2d.py` 内以 `vendor_name == "spacemit"` 跳过梯度段，
-   因为该 kernel 是推理前向实现、没有 autograd），后者是 SpacemiT 专属注册/限制测试。
-5. **证据分级**（不得混用）：
+| 库 | 版本 |
+| --- | --- |
+| `libsleef.so.3` | `libsleef3 3.6-1~exp1` |
+| `libomp.so.5` | `libomp5-18 1:18.1.8-11bb4` |
+| `libnuma.so.1` | `libnuma1 2.0.18-1build1` |
 
-| 环境 | 数值正确性 | 性能 | 状态 |
+在 K1 上从本仓库根目录执行。共享库依赖 Bianbu 软件源提供的对应版本。
+
+```bash
+export PETVISION_K1="$HOME/petvision-k1"
+mkdir -p "$PETVISION_K1/libs/root"
+python3 -m venv --without-pip "$PETVISION_K1/venv"
+k1_pip=$(mktemp)
+curl -fsSL https://bootstrap.pypa.io/get-pip.py -o "$k1_pip"
+"$PETVISION_K1/venv/bin/python" "$k1_pip" -q
+rm -f -- "$k1_pip"
+. "$PETVISION_K1/venv/bin/activate"
+python -m pip install --index-url https://git.spacemit.com/api/v4/projects/33/packages/pypi/simple \
+  --extra-index-url https://pypi.org/simple \
+  "torch==2.8.0+spacemit.0" "torchvision==0.23.0" "triton==3.6.0+spacemit.a5"
+(
+  cd "$PETVISION_K1/libs"
+  apt-get download 'libsleef3=3.6-1~exp1' 'libomp5-18=1:18.1.8-11bb4' 'libnuma1=2.0.18-1build1'
+  for deb in ./*.deb; do dpkg-deb -x "$deb" root; done
+)
+git clone https://github.com/flagos-ai/FlagGems.git "$PETVISION_K1/FlagGems"
+git -C "$PETVISION_K1/FlagGems" checkout --detach "$(cat third_party/FLAGGEMS_COMMIT.txt)"
+git -C "$PETVISION_K1/FlagGems" apply "$PWD/patches/0001-triton-libdevice-hypot-compat.patch" \
+  "$PWD/patches/0002-tests-softmax-37-class-logits.patch"
+python -m pip install 'packaging>=26.0' 'PyYAML==6.0.1' 'sqlalchemy==1.4.52' \
+  'setuptools<77' 'setuptools-scm>=8,<10' 'wheel==0.46.2' pytest
+SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 python -m pip install --no-deps --no-build-isolation "$PETVISION_K1/FlagGems"
+mkdir -p "$PETVISION_K1/app/scripts" "$PETVISION_K1/private"
+cp petvision_forward.py flagos_env.py "$PETVISION_K1/app/"
+cp scripts/k1_env.sh scripts/k1_ops_check.py scripts/k1_ab_model.py "$PETVISION_K1/app/scripts/"
+```
+
+**固定版导入兼容（仅隔离环境，不是上游已修复）**：SpacemiT 的
+`triton.language.extra.cpu.libdevice`（a5 与 b1 都一样）只有 45 个符号，缺
+`hypot`，而 FlagGems `_foreach_complex_math.py` 在导入期取
+`tl_extra_shim.hypot`。部署树加了 `patches/0001-triton-libdevice-hypot-compat.patch`
+（缺省回退到通用 `triton.language.extra.libdevice.hypot`），只影响未使用的复数
+foreach 算子；这不是 PetVision 的性能/正确性结论。
+
+## 3. 为什么选 `aten._softmax`
+
+在 x86（torch 2.11）和 K1 上用 `TorchDispatchMode` 实测：
+
+* `AdaptiveAvgPool2d(1)` 分解为 **1 次 `aten.mean.dim`**；
+* ResNet-50 每前向 **53 次 `aten.convolution`**（53 个 Conv2d 前向钩子也计数为 53）；
+* 37 类分类概率是 **1 次 `aten._softmax`**（`torch.softmax(logits, dim=1)`）。
+
+`mean.dim` 属于模型前向内部、更有价值，但在 K1 上未通过（第 5 节），
+因此最终实证选择**数值已通过、且 PetVision 真实调用**的 `aten._softmax`。
+注册名使用实现名 `softmax`（固定版 `only_enable` 的 include 语义），
+`torch.softmax` 经 `aten._softmax` 派发到 `_spacemit.ops.softmax`。
+
+## 4. 真机结果（原始 JSON 在 `results/k1/`）
+
+### 4.1 完整 ResNet-50（同机、同权重）
+
+| 输入 | 路径 | median | conv2d/前向 | max_abs_err vs x86 | Top-1 |
+| --- | --- | --- | --- | --- | --- |
+| seed 0，`randn(1,3,256,256)` | 原生 ATen | 2115.76 ms | 53 | `1.19e-06` | `leonberger` (p=0.050724) |
+| `Abyssinian_201.jpg` | 原生 ATen | 2167.63 ms | 53 | `1.05e-05` | `Abyssinian` (p=0.997643857) |
+| 同一张图 + 仅 `softmax` 注册（旧路径 artifact） | 前向仍是原生 ATen；后处理厂商 kernel | 2383.14 ms* | 53 | `1.05e-05` | `Abyssinian` (p=0.997643888) |
+
+\* 上表最后一行的 2383.14 ms 来自旧路径 artifact，保留不改。当前
+`--enable-ops softmax` 使用 **softmax-only 契约**：模型 logits 由原生路径产出，
+不再执行/记录/重复计时 FlagGems 模型前向；只在概率计算时进入
+`use_gems(include=["softmax"], record=False)`，模型时间取 `native_torch.timing`，
+JSON 的 `flag_gems.model_path` 与 `flag_gems.timing.note` 会写明。
+同一次交替 A/B 的结果见下表。真图→概率路径的厂商 kernel 计数为 **1**，
+概率与原生差 `1.42e-14`。
+
+计时：`time.perf_counter`，同进程、同 shape/dtype，`torch.set_num_threads(8)`，
+CPU 亲和 0–7。seed 0 预热 3 次、测量 10 次。
+真图: warmup 1 + repeat 5。派发 tracing 与计时分离。
+
+**同一次交替 A/B（`scripts/k1_ab_model.py`，`results/k1/ab_image.json`）**：
+同一模型/同一真图/8 线程，10 对，每对按奇偶交换 native/vendor 顺序，
+`record=False`、无 hook、每对分别计时模型前向与 softmax：
+
+| 指标 | native | vendor | 说明 |
 | --- | --- | --- | --- |
-| 本地 x86_64 CPU + PyTorch 2.11（Windows） | ✅ 5 个 conv2d case + 真实 ResNet-50 前向 | ✅ 有 JSON | 已验证（本仓库 `results/local_x86_cpu_20261122/`） |
-| SpacemiT x64 emulation（x86 主机 + RISC-V 用户态仿真） | ❌ 未执行 | ❌ 未采集 | 镜像已解包且 chroot 可运行，但镜像缺 triton/flagtree/RPC runtime；证据见 `results/spacemit_emu_20261122/environment_attempt.json` |
-| SpacemiT K3 真机 | — | — | **未取得真机证据**，本仓库不声称任何 RVV 加速比 |
+| 模型前向 median | 2306.28 ms | 2255.56 ms | 两臂都使用原生 ATen 执行前向，无法将差值归因于 softmax |
+| 模型前向加 softmax median | 2306.42 ms | 2257.36 ms | 对每轮两段耗时求和后取中位数 |
+| 37 类 softmax median | 0.113 ms | 1.195 ms | 厂商 kernel 慢约 10.6×，不声称收益 |
+| 概率 max_abs_diff | — | `1.42e-14` | Top-1 一致 |
 
-## 2. 目录结构
+`topk_summary*` 只展示 batch 的**第 0 张**（JSON 中 `sample: 0`）；`--batch > 1`
+时 `logits_metrics` 的 `top1_*` 仍是旧的“flatten 后”语义，JSON 中写有
+`batch_note`。`--image` 与 `--batch != 1` 会被明确拒绝。
+
+### 4.2 单算子（`results/k1/ops_softmax.json`）
+
+| 算子 | 原生 median | 厂商 median | 数值 | kernel launch |
+| --- | --- | --- | --- | --- |
+| `(1,37) FP32` softmax | 0.0353 ms | 0.5902 ms | max_abs `5.96e-08` | 1 |
+
+厂商 softmax 慢约 16×（小 shape、libtuner 配置），**不声称性能收益**。
+
+### 4.3 派发证据
+
+* `impl.softmax_module == "_spacemit.ops.softmax"`；
+* `probabilities.softmax_kernel_runs == 1`（`softmax_kernel_spacemit.run` 真实计数）；
+* `TRITON_CACHE_DIR` 新增编译产物（JIT 执行）；
+* `checks` 全为 true：`softmax_kernel_invoked_once`、`softmax_probs_match`、
+  `softmax_top1_agree`、`reference_allclose`、`reference_top1_agree`。
+
+## 5. 失败与未解决问题（不掩盖）
+
+### 5.1 厂商 `conv2d`：K1 明确不支持
+
+最小复现（`scripts/k1_ops_check.py --only conv2d`，4 个小 shape 全部失败）：
 
 ```
-conv2d_case.py                 最小 conv2d 正确性 + 计时（参考实现：fp64 CPU torch）
-petvision_forward.py           真实 ResNet-50 权重前向 + 计时 + conv2d 调用计数
-flagos_env.py                  版本/环境采集、warmup+repeat 计时、误差指标
-tools/fetch_oci_rootfs.py      无 Docker 守护进程地把镜像流式解包成 rootfs（本次远端方案）
-patches/                       上游候选补丁（对 FlagGems 固定 commit 生成，git apply 可用）
-results/local_x86_cpu_20261122/  本地 CPU 原始 JSON（真实执行结果）
-results/spacemit_emu_20261122/   仿真环境原始 JSON/日志（若执行成功）
-third_party/FLAGGEMS_COMMIT.txt  上游 commit 固定点
+NotImplementedError: global_mbarrier Not supported: The syntax is not currently
+implemented in the lowering.
 ```
 
-`third_party/FlagGems/` 是**不入库**的只读检出目录（`.gitignore` 排除），用于生成/校验补丁：
+来源：`_spacemit/ops/conv2d.py` 的融合 im2col+GEMM kernel 使用
+`smt.global_mbarrier`。编译期另有 `'+xsmtvdoti' is not a recognized feature for
+this target` 警告（K1 目标缺该特性）。因此该 kernel **不能**作为 K1 上游候选，
+旧 `patches/` 中“取消注释即修复”的补丁已删除。
 
-```bash
-git clone https://github.com/FlagOpen/FlagGems.git third_party/FlagGems
-git -C third_party/FlagGems checkout 43c9cab402f7e286de9cbfc6238ea3e7bfe354cb
+代码审查另有两处**未运行验证**的隐患，仅记录、不声称已修复：
+
+* 函数签名是 `conv2d(input, weight, bias, padding, stride, …)`，而 ATen 的
+  `conv2d` 是 `(input, weight, bias, stride, padding, …)`；直接注册会交换
+  stride/padding（本次因编译失败，未做运行时断言）。
+* im2col 把 C 方向连续写入 `K = C*KH*KW` 的列，布局只在 `C` 块对齐/尾部覆盖
+  假设下成立；没有在 K1 上获得可运行证据。
+
+**通用** FlagGems `conv2d` 基线在 K1 上数值正确（max_abs `9.54e-07`，输入
+`1×4×9×7`，stride 2/pad 1），但它不是厂商 kernel，也没有用于最终推理。
+
+### 5.2 厂商 `mean.dim`：编译失败 → 实验性修正后 NaN
+
+固定版原样（`(1,2048,8,8)`, `dim=[2,3]`, `keepdim=True`）在编译期失败：
+
+```
+AssertionError('Loop-carried variable _mean has initial type fp32 but is
+re-assigned to fp64 in loop! Please make sure that the type stays consistent.')
 ```
 
-## 3. 从原课设取权重（不复制、不写入）
+`patches/0003-EXPERIMENTAL-spacemit-mean-dim-k1-does-not-fix.patch`
+加入 `tl.sum(..., dtype=tl.float32)` 与 `padding_option="zero"` 后可以编译，
+真实 launch 计数为 1，但输出为 **NaN**（`1×2048×8×8` 和 `1×2048×1×1` 都错），
+与 fp64 参考 `allclose=false`。单独的 masked-load `tl.sum` 探针在 K1 上数值正确，
+因此**不把根因归给编译器**；该 patch 明确标注“不能作为上游修复”，
+且**最终 venv 已恢复原始 `mean.py`**，不再保留实验性补丁。
 
-本工程**不 import 课程包**，只按 checkpoint 的键名复刻同样的结构：
+### 5.3 其它
 
-* `backbone.*` → `torchvision.models.resnet50(weights=None)`（`fc` 换成 `Identity`）
-* `classifier.0.*` → `nn.Linear(2048, 37)`
-* `load_state_dict(..., strict=True)`，失败即报错
+* 分割分支（U-Net / `ConvTranspose2d`）未移植、未运行；本报告只覆盖最终
+  ResNet-50 分类路径。
+* 未做 RVV/SMT 优化；没有可靠热点收益证据。
+* 未向上游提交 PR；只准备了可审查的 softmax 测试补丁。
 
-权重通过显式参数传入，默认只读打开：
+## 6. 上游候选（分级）
 
-```bash
---weights C:/Users/27978/Downloads/111/resnet50-256-color-raw-20261103-212216-24717/raw/best.pt
-```
-
-脚本只记录 `size_bytes` 与 `mtime_ns`（运行前后对比），并在 JSON 中写
-`"unchanged": true`；不做整文件哈希。仓库内没有任何 `.pt`/`.pth`（`.gitignore` 已排除）。分割权重
-`segmentation-320-.../best.pt` 没有用于本次运行，原因见第 8 节。
-
-## 4. 运行前提
-
-* Python ≥ 3.10，`torch` + `torchvision`（本地 CPU 即可；本仓库在
-  `torch 2.11.0+cu128` / `torchvision 0.26.0` 上验证，CPU 后端）。
-* `conv2d_case.py` 不需要 FlagGems，也不需要任何私有路径，可直接复现参考数值与耗时。
-* `--backend flag_gems` 需要 FlagGems + 目标后端（`GEMS_VENDOR=spacemit` + SpacemiT
-  Triton 插件）。本地 Windows 没有 SpacemiT Triton，因此本地只跑 `--backend torch`。
-
-最小本地窄检查（任何有 torch 的环境；本次执行过，日志在
-`results/local_x86_cpu_20261122/*/run.log`）：
-
-```bash
-python -m py_compile conv2d_case.py petvision_forward.py flagos_env.py \
-    tools/fetch_oci_rootfs.py
-python conv2d_case.py --backend torch --out results/local_check/conv2d
-python petvision_forward.py --backend torch --weights <best.pt> \
-    --save-logits results/local_check/logits.json --out results/local_check/model
-```
-
-补丁自身的最小校验（不需要 GPU/SpacemiT 硬件）：
-
-```bash
-cd third_party/FlagGems
-git apply --check ../../patches/0001-spacemit-conv2d-enable-forward-kernel.patch
-git apply --check ../../patches/0002-tests-spacemit-conv2d.patch
-```
-
-## 5. SpacemiT 环境（官方镜像）
-
-官方文档给出的两条路（`harbor.baai.ac.cn` 可访问，实测 manifest 总计 **11.47 GB
-压缩 / 19.4 GB 解包**）：
-
-```bash
-IMAGE=harbor.baai.ac.cn/flagtree/flagtree-spacemit-py312-torch2.10.0-ubuntu24.04:202607-3.6-base
-docker pull "$IMAGE"          # 文档标注 19.4GB
-# 或
-wget https://baai-cp-web.ks3-cn-beijing.ksyuncs.com/trans/flagtree-spacemit-py312-torch2.10.0-ubuntu24.04.202607-3.6-base.tar.gz
-docker load -i flagtree-spacemit-py312-torch2.10.0-ubuntu24.04.202607-3.6-base.tar.gz
-```
-
-容器内：`triton==3.6.0+spacemit.a5`，x86 侧做编译、RISC-V 侧由
-`spine-rpc-server`（jdsk-qemu 用户态仿真，`SPINE_TRITON_TARGET_ARCH=riscv64`）执行
-kernel。运行算子前需：
-
-```bash
-export GEMS_VENDOR=spacemit
-export SPINE_TRITON_TARGET_ARCH=riscv64
-```
-
-（FlagTree CI 用 self-hosted runner `spacemit3.6` + jdsk-qemu v10.0.2
-`-cpu max,vlen=1024,elen=64,vext_spec=v1.0` 启动 spine-rpc-server，经 TCP 9999 下发
-kernel；该工作流文件在 `flagos-ai/FlagTree` 仓库内，非本仓库资产。）
-
-### 5.1 无 Docker 的 rootfs 方案（本次使用的替代路径）
-
-本次可用的 x86 主机只有 2 vCPU / 2 GiB RAM / 30 GB 空闲磁盘，`docker pull` 会同时保留
-压缩 blob 与解包快照（约 31 GB），因此改用流式解包到普通目录：
-
-```bash
-sudo python3 tools/fetch_oci_rootfs.py \
-    --repo flagtree/flagtree-spacemit-py312-torch2.10.0-ubuntu24.04 \
-    --tag 202607-3.6-base --dest /var/tmp/sm-rootfs
-```
-
-然后把本仓库拷进 rootfs 并在 chroot 中运行（`/proc`、`/sys`、`/dev` 需 bind mount），
-完整命令见 `scripts/run_in_spacemit_rootfs.sh`。本次实测的资源事实：
-
-| 事实 | 数值 |
-| --- | --- |
-| 镜像 manifest 压缩总量 | 11.47 GB（11 层，最大层 8.86 GB） |
-| 官方文档标注解包后体积 / `docker pull` 体积 | 11 GB 归档 / 19.4 GB 镜像 |
-| 远端主机 | 2 vCPU，1962 MiB RAM + 2048 MiB swap，`/` 空闲 30 GB，`/tmp` 是 982 MiB tmpfs |
-| Harbor 可访问性 | 可访问；实测带宽 ≈ 13 MiB/s |
-| GitHub Releases | 30 s 内 0 字节（`curl` 超时），未能下载 RISC-V runtime 资产 |
-
-结论：`docker pull` 需要"压缩 blob + 解包快照"两份存储，超出空闲磁盘，故改用流式
-rootfs。本次实际做到"解包成功 + chroot 可运行"，但镜像内缺 triton/flagtree/RPC
-runtime，因此 **SpacemiT kernel 未执行**；失败事实完整记录在
-`results/spacemit_emu_20261122/environment_attempt.json`，不得用本地 CPU 结果替代。
-
-## 6. 为什么 conv2d 之前没有被导出（注册链证据）
-
-1. `flag_gems/__init__.py` 先执行
-   `SpecOpRegistrar(registry=globals(), vendor=vendor_name).apply()`（第 66–67 行），
-   再用这些全局名字构造 `_FULL_CONFIG`（第 94 行起）。因此 backend 的 `ops/__init__.py`
-   决定 `("conv2d", conv2d)` 指向**厂商实现还是通用实现**。
-2. `_spacemit/ops/__init__.py` 把 `from .conv2d import conv2d` 注释掉后，
-   `import_vendor_extra_lib` 里 `inspect.getmembers(ops_module, isfunction)` 拿不到
-   `conv2d`，`SpecOpRegistrar` 不会覆盖，`aten::conv2d` 注册的是
-   `flag_gems.ops.conv2d`（CUDA 取向，实现里假设 GPU/`runtime` 语义）。
-3. 该注释从 PR #2527（"Add Spacemit runtime backend with operator implementations"）
-   引入时就存在，且同一 PR 把 conv 测试在 spacemit 上 skip（`git log -S` 可复现）。
-   现在 CI 配置 `.github/backends.json` 里 spacemit `enabled: true`，`ops-test` 用
-   `tools/run_tests.py --stages all` 全量跑测试；`tests/test_conv2d.py` 含反向传播段，
-   而该 kernel 是纯前向函数（没有 `torch.autograd.Function`）。所以"只取消注释"
-   必然在 spacemit CI 上失败——这就是必须先做接口限制 + 测试适配的原因。
-4. 其它缺陷（本次修复）：`groups` 被忽略（`conv1d`/`thnn_conv2d`/
-   `_conv_depthwise2d` 都以 `groups` 语义调用它）；字符串 padding 不支持；导出前
-   没有任何 backend 级测试。
-
-### 6.1 接口/形状限制（补丁后）
-
-| 参数 | 支持情况 | 处理 |
+| 文件 | 级别 | 内容 |
 | --- | --- | --- |
-| `groups=1` | ✅ | 正常走融合 im2col+GEMM |
-| `groups>1`（含 depthwise） | ❌ | 抛 `NotImplementedError`（修复前：静默错误） |
-| `padding=int/tuple` | ✅ | 支持 |
-| `padding="same"/"valid"` | ❌ | 抛 `NotImplementedError`（即使 `"valid"` 也显式拒绝，避免语义分叉） |
-| `dilation>1` | ✅ | kernel 内已实现，本次用例含 `dilation=2` |
-| `bias` 有/无 | ✅ | `HAS_BIAS` 常量分支 |
-| dtype | fp32（本仓库验证） | fp16 未在目标环境验证，不声称支持 |
-| 反向传播 | ❌ | 无 autograd 实现；`tests/test_conv2d.py` 在 spacemit 上跳过梯度段 |
+| `patches/0002-tests-softmax-37-class-logits.patch` | ✅ 可提交 | `tests/test_softmax.py` 新增确定性 FP32 `(1,37)` 前向数值用例，直接调用 `flag_gems.softmax` 对照 PyTorch。最终补丁在 K1 上复跑 `1 passed, 112 deselected`。|
+| `patches/0001-triton-libdevice-hypot-compat.patch` | ⚠️ 环境兼容 | 仅为固定版在 SpacemiT Triton 上可导入；未证明其他后端需要 |
+| `patches/0003-EXPERIMENTAL-spacemit-mean-dim-k1-does-not-fix.patch` | ❌ 不可提交 | 能过编译但结果 NaN，保留为失败复现 |
 
-## 7. 数值与性能结果
+`tests/test_mean.py` 未加入失败用例；`mean.dim` 的失败由
+`results/k1/ops_mean_k1_failure.json` 与 `scripts/k1_ops_check.py --only mean` 复现。
 
-只记录**真实执行**的结果；同一 JSON 内不会把不同机器拼表。
+## 7. K1 部署（保留，供验收）
 
-### 7.1 本地 x86_64 CPU（PyTorch 2.11，Windows 11）
+部署目录为 `$HOME/petvision-k1`。
 
-参考实现是 fp64 CPU 卷积，候选是原生 `aten::conv2d`（`--backend torch`，
-`--device auto` 解析为 `cpu`），`warmup=5, repeat=20`，同步策略：CPU eager，
-无需 synchronize（JSON 中 `config.device`/`timing.sync` 记录了实际值）。
+| 路径 | 内容 | 保留 |
+| --- | --- | --- |
+| `venv/` | 已装 torch/torchvision/triton/FlagGems | ✅ |
+| `app/` | `petvision_forward.py`、`flagos_env.py`、`scripts/` | ✅ |
+| `FlagGems/` | 固定版源码（含 hypot 兼容） | ✅ |
+| `libs/root/usr/lib/riscv64-linux-gnu/` | sleef/openmp/numa | ✅ |
+| `private/best_slim.pt` | 94,647,883 B，320 个 state 项，`weights_only=True` 可读 | ✅ |
+| `private/Abyssinian_201.jpg` | 验收图（46,667 B，不入 Git） | ✅ |
+| `private/x86_seed0_logits.json`、`private/x86_image_logits.json` | x86 参考 | ✅ |
+| `triton-cache/` | JIT 缓存 | ✅ |
+| `results/k1/` | 板端原始 JSON | ✅ |
 
-| case | input | weight | stride/pad/dil | bias | max_abs_err | median |
-| --- | --- | --- | --- | --- | --- | --- |
-| unet_conv3x3_pad1_bias | 1×3×32×32 | 8×3×3×3 | 1/1/1 | ✅ | 5.72e-06 | 0.033 ms |
-| stride2_pad1_bias_odd_input | 1×4×17×15 | 6×4×3×3 | 2/1/1 | ✅ | 1.91e-06 | 0.026 ms |
-| valid_nopad_nobias_batch2 | 2×3×19×19 | 5×3×3×3 | 1/0/1 | ❌ | 3.81e-06 | 0.140 ms |
-| dilation2_pad2_bias | 1×3×15×15 | 4×3×3×3 | 1/2/2 | ✅ | 2.86e-06 | 0.052 ms |
-| petvision_resnet50_stem_7x7_s2_pad3 | 1×3×256×256 | 64×3×7×7 | 2/3/1 | ❌ | 3.05e-05 | 0.659 ms |
-
-真实模型（ResNet-50，256×256，batch=1，`warmup=1, repeat=3`）：
-**47.88 ms / 前向（median）**，53 次 conv2d 调用/前向，权重 `unchanged: true`。
-原始数据：`results/local_x86_cpu_20261122/`。
-
-### 7.2 SpacemiT x64 emulation
-
-**未取得执行证据**。本次单次尝试的完整事实记录在
-`results/spacemit_emu_20261122/environment_attempt.json` 与
-`results/spacemit_emu_20261122/fetch_image_rootfs.log`：
-
-1. 镜像 11 个层、压缩 11.47 GB，用 `tools/fetch_oci_rootfs.py` 流式解包成功
-   （18 GB rootfs，907 s，剩余磁盘 12.6 GB），未创建任何 docker 镜像/容器。
-2. `chroot` 可运行：Python 3.12.3、`torch 2.10.0+cu128`、`torchvision 0.25.0`、
-   `numpy 2.4.2`，工具链在 `/opt/spacemit/spacemit-toolchain-linux-glibc-x86_64-ame-20260612`。
-3. **但镜像内没有 `triton`、没有 `flagtree`、没有 `~/.flagtree/spacemit`、
-   没有 `spine-rpc-server`**（`pip list` 与全盘 `find` 均确认）。该 tag 是
-   "build-from-source base"，不是可直接运行的 SpacemiT 后端；要装插件需 FlagTree 源码
-   编译 + GitHub Releases 的 RISC-V runtime 资产，而本机 GitHub Releases 下载 30 s 收到
-   0 字节（`git ls-remote` 可用），且 1962 MiB RAM / 2 vCPU 不足以构建 LLVM/Triton。
-4. 因此 **没有 SpacemiT 算子执行、没有 RVV 数据**；本地 CPU 数字不得替代。尝试后已
-   卸载 bind mount 并删除 18 GB rootfs 与临时目录，主机磁盘恢复到 30 GB 空闲，
-   未触碰主机上已有的容器/镜像。
-
-真机证据：**未取得**。
-
-## 8. 范围、阻塞与下一步
-
-* **分割模型未跑**：U-Net 上采样使用 `ConvTranspose2d`，SpacemiT 后端没有
-  `conv_transpose2d` 实现；即使 conv2d 适配完成，U-Net 也无法在 FlagGems 下完整前向。
-  这是 SpacemiT 后端缺口，不是本补丁试图掩盖的问题。
-* **SpacemiT 执行未完成（最重要阻塞）**：官方 `202607-3.6-base` 镜像缺
-  `triton`/`flagtree` 与 RISC-V `spine-rpc-server`，无法在本机仿真环境跑 kernel；
-  详细环境事实见 `results/spacemit_emu_20261122/environment_attempt.json`。
-* **未做 RVV 优化**：没有真机热点数据，任何"RVV 收益"都不会被声称。补丁只做正确性、
-  注册与测试。
-* **下一步**：① 在 FlagTree spacemit3.6 runner 上跑 `tests/test_conv2d.py` 全参数
-  组合，确认 fp32 全形状通过、fp16 是否可用；② 若需要 depthwise/depthwise-like 模型，
-  给 kernel 增加分组支持后再导出 `conv1d`/`thnn_conv2d`/`_conv_depthwise2d`；
-  ③ K3 真机上对 PetVision 前向做 warmup+repeat 计时与 profile，再决定 RVV 优化点。
-
-## 9. 上游候选补丁
+从空环境复现时，先在 x86 的课设 PyTorch 环境中设置 `PETVISION_ORIGINAL_WEIGHTS`
+和 `PETVISION_IMAGE`，分别指向本人训练的 `raw/best.pt` 和测试图 `Abyssinian_201.jpg`。
+在本仓库根目录生成部署文件：
 
 ```bash
-cd third_party/FlagGems           # 固定 commit 43c9cab...
-git apply ../../patches/0001-spacemit-conv2d-enable-forward-kernel.patch
-git apply ../../patches/0002-tests-spacemit-conv2d.patch
-python -m py_compile \
-  src/flag_gems/runtime/backend/_spacemit/ops/conv2d.py \
-  src/flag_gems/runtime/backend/_spacemit/ops/__init__.py \
-  tests/test_conv2d.py tests/accuracy_utils.py tests/test_conv2d_spacemit.py
-python tools/ci_checks/check_init_exports.py     # 29 个 backend ops __init__ 全部通过
+python - "$PETVISION_ORIGINAL_WEIGHTS" <<'PY'
+import sys
+import torch
+
+checkpoint = torch.load(sys.argv[1], map_location="cpu", weights_only=False)
+fields = ("model_state", "class_names", "architecture", "image_size", "mode", "precision", "epoch")
+torch.save({key: checkpoint[key] for key in fields}, "best_slim.pt")
+PY
+python petvision_forward.py --backend torch --threads 1 --weights best_slim.pt \
+  --image "$PETVISION_IMAGE" --save-logits x86_image_logits.json --out results/x86_reference
 ```
 
-补丁内容与理由：
+将 `best_slim.pt`、测试图和 `x86_image_logits.json` 放入板端 `private/`。固定种子输入的参考值使用
+本仓库的 `results/local_x86_cpu_20261122/model/logits.json`。
 
-| 文件 | 改动 | 理由 |
-| --- | --- | --- |
-| `_spacemit/ops/conv2d.py` | 增加 `groups != 1`、字符串 padding 的 `NotImplementedError` 与 docstring | 修复静默错误；限制可审查 |
-| `_spacemit/ops/__init__.py` | 导出 `conv2d`（只导出它，`conv1d`/`thnn`/depthwise 仍注释） | 让 `aten::conv2d` 真正走厂商 kernel |
-| `tests/test_conv2d.py` | 前向断言后 `if vendor_name == "spacemit": return`；`test_conv2d_padding` 在 spacemit 跳过 | 该 kernel 无 autograd；不支持字符串 padding。只改本文件，不动通用 `accuracy_utils.TestForwardOnly()`，避免扩大其他测试的语义 |
-| `tests/test_conv2d_spacemit.py`（新增） | 断言注册到 `GEMS_SPACEMIT`；断言不支持参数抛错 | 防止"注释掉导出"回归 |
+验收命令（板端）：
 
-补丁对 `43c9cab4` 用 `git apply --check` 验证通过；`check_init_exports.py` 全通过；
-所有改动文件 `py_compile` 通过。**未提交上游 PR、未 push 任何远端**。
+```bash
+cd "$HOME/petvision-k1/app" && . scripts/k1_env.sh
+python scripts/k1_ops_check.py --only softmax --out /tmp/k1_accept_ops
+python petvision_forward.py --backend torch --threads 8 --warmup 1 --repeat 5 \
+  --weights ../private/best_slim.pt --image ../private/Abyssinian_201.jpg \
+  --reference-logits ../private/x86_image_logits.json \
+  --out /tmp/k1_accept_native
+python petvision_forward.py --backend flag_gems --enable-ops softmax --threads 8 \
+  --warmup 1 --repeat 5 --weights ../private/best_slim.pt \
+  --image ../private/Abyssinian_201.jpg \
+  --reference-logits ../private/x86_image_logits.json \
+  --out /tmp/k1_accept_softmax
+# 仅 --only softmax 用严格条件（kernel_runs==1 且两份数值通过）决定退出码；
+# --only conv2d/mean 的退出码只表示“失败证据收集成功”，JSON 中 operator_passed=false。
+python scripts/k1_ab_model.py --threads 8 --pairs 10 --weights ../private/best_slim.pt \
+  --image ../private/Abyssinian_201.jpg --out /tmp/k1_ab_image.json
+cd ../FlagGems && python -m pytest tests/test_softmax.py -k 37_class_logits -q
+```
 
-## 10. 性能方法学
+预期：真图 Top-1 `Abyssinian`、p≈`0.997644`；`softmax_kernel_runs == 1`；
+单测 1 passed。
 
-* 计时为同一进程、同一环境：`time.perf_counter`，先 `warmup` 次再 `repeat` 次，
-  报告逐次样本、`median_ms`、`p50_ms`（与 median 等价，取中位数）、`mean/min/max/stdev`。
-* 候选实现在**活动设备**上运行（`--backend flag_gems` 时 `--device auto` 取
-  `flag_gems.device`，SpacemiT 后端为 `cpu`；GPU 后端则为对应设备），计时前后调用该设备
-  的 synchronize；参考值始终在 CPU 上以 fp64 计算，比较前 `.cpu()`，JSON 中记
-  `"sync": "none (eager CPU execution)"` 或 `torch.<dev>.synchronize()`。
-* 参考实现与候选实现使用同一输入张量（固定 seed）、同一 dtype、同一 shape。
-* 跨机器结果不合并：本地 CPU 表与仿真/真机结果分目录、分 JSON。
-* 仿真环境里的"耗时"包含 qemu 用户态模拟与 RPC 往返，只能用于"是否跑通"，不能当 K3 性能。
+## 8. 验证范围
+
+本次运行覆盖 PetVision 的最终 ResNet-50 分类路径。原始测量位于 `results/k1/`，
+源权重和测试图由使用者在私有目录中提供。

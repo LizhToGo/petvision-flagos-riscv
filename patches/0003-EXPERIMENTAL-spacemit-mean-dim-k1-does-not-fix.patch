@@ -1,0 +1,14 @@
+--- a/src/flag_gems/runtime/backend/_spacemit/ops/mean.py
++++ b/src/flag_gems/runtime/backend/_spacemit/ops/mean.py
+@@ -101,9 +101,10 @@
+         a = tl.load(
+             x_ptr_desc,
+             boundary_check=[0],
++            padding_option="zero",
+         )
+ 
+-        _mean += tl.sum(a)
++        _mean += tl.sum(a, dtype=tl.float32)
+ 
+         x_ptr_desc = tl.advance(x_ptr_desc, [TILE_N])
+ 

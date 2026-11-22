@@ -1,0 +1,150 @@
+{
+  "schema": 1,
+  "kind": "k1_conv2d_probe",
+  "environment": {
+    "python": "3.12.3",
+    "machine": "riscv64",
+    "platform": "Linux-6.6.63-cloud-riscv64-with-glibc2.39",
+    "torch": "2.8.0+spacemit.0",
+    "torch_num_threads": 8,
+    "cpu_count": 8,
+    "affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "env": {
+      "GEMS_VENDOR": "spacemit",
+      "TRITON_CACHE_DIR": "<K1>/triton-cache"
+    },
+    "triton": "unavailable: RuntimeError('0 active drivers ([]). There should only be one.')",
+    "torchvision": "0.23.0",
+    "isa": "rv64imafdcv_zicbom_zicboz_zicntr_zicond_zicsr_zifencei_zihintpause_zihpm_zfh_zfhmin_zca_zcd_zba_zbb_zbc_zbs_zkt_zve32f_zve32x_zve64d_zve64f_zve64x_zvfh_zvfhmin_zvkt_sscofpmf_sstc_svinval_svnapot_svpbmt_ime",
+    "device_tree_model": "spacemit k1-x som board"
+  },
+  "flag_gems": {
+    "version": "0.0.0",
+    "vendor": "spacemit",
+    "device": "cpu",
+    "conv2d_module": "flag_gems.ops.conv2d",
+    "mean_dim_module": "_spacemit.ops.mean",
+    "softmax_module": "_spacemit.ops.softmax"
+  },
+  "aten_conv2d_baseline": {
+    "case": "c3_s2_p1_bias",
+    "generic_module": "flag_gems.ops.conv2d",
+    "generic_signature": "(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1)",
+    "metrics": {
+      "out_shape": [
+        1,
+        4,
+        5,
+        4
+      ],
+      "ref_shape": [
+        1,
+        4,
+        5,
+        4
+      ],
+      "max_abs_err": 9.5367431640625e-07,
+      "mean_abs_err": 2.250541001558304e-07,
+      "allclose": true,
+      "has_nan": false
+    }
+  },
+  "direct_conv2d": {
+    "vendor_module": "flag_gems.runtime.backend._spacemit.ops.conv2d",
+    "vendor_signature": "(input, weight, bias=None, padding=0, stride=1, dilation=1, groups=1)",
+    "cases": [
+      {
+        "name": "c3_s1_p1_bias",
+        "input": [
+          1,
+          3,
+          8,
+          8
+        ],
+        "weight": [
+          4,
+          3,
+          3,
+          3
+        ],
+        "stride": 1,
+        "padding": 1,
+        "dilation": 1,
+        "bias": true,
+        "error": "Traceback (most recent call last):\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/core.py\", line 43, in wrapper\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/extra/smt/core.py\", line 179, in global_mbarrier\n    return smt_semantic.global_mbarrier(id, _semantic)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/extra/smt/semantic.py\", line 337, in global_mbarrier\n    raise NotImplementedError(\"global_mbarrier Not supported: The syntax is not currently implemented in the lowering.\")\nNotImplementedError: global_mbarrier Not supported: The syntax is not currently implemented in the lowering.\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"<K1>/app/scripts/k1_ops_check.py\", line 206, in run_direct_conv\n    y = vconv(x, w, b, padding=case[\"padding\"], stride=case[\"stride\"], dilation=case[\"dilation\"], groups=1)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/runtime/backend/_spacemit/ops/conv2d.py\", line 248, in conv2d\n    fused_im2col_bmm_kernel[grid](\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 370, in <lambda>\n    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1744, in run\n    kernel = self._first_run(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1634, in _first_run\n    return self._first_run_once(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1664, in _first_run_once\n    return self.fn.run(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 733, in run\n    kernel = self._do_compile(key, signature, device, constexprs, options, attrs, warmup)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 860, in _do_compile\n    kernel = self.compile(src, target=target, options=options.__dict__)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/compiler/compiler.py\", line 307, in compile\n    module = src.make_ir(target, options, codegen_fns, module_map, context)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/compiler/compiler.py\", line 80, in make_ir\n    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntriton.compiler.errors.CompilationError: at 64:10:\n    oh = ohow // OW\n    ow = ohow % OW\n    window_h = oh * stride_h - pad_h\n    window_w = ow * stride_w - pad_w\n    bmm_pid = tl.maximum(pid - NUM_IM2COL_BLOCKS, 0)\n    pid_b = bmm_pid // NUM_BMM_TILES_PER_BATCH\n    local_tile = bmm_pid % NUM_BMM_TILES_PER_BATCH\n    pid_m = local_tile // NUM_TILES_N\n    pid_n = local_tile % NUM_TILES_N\n    block_m = pid_m * TILE_M\n    block_n = pid_n * TILE_N\n    bar = smt.global_mbarrier(0)\n          ^\nglobal_mbarrier Not supported: The syntax is not currently implemented in the lowering.\n",
+        "aten_positional_call": {
+          "error": "Traceback (most recent call last):\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/core.py\", line 43, in wrapper\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/extra/smt/core.py\", line 179, in global_mbarrier\n    return smt_semantic.global_mbarrier(id, _semantic)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/extra/smt/semantic.py\", line 337, in global_mbarrier\n    raise NotImplementedError(\"global_mbarrier Not supported: The syntax is not currently implemented in the lowering.\")\nNotImplementedError: global_mbarrier Not supported: The syntax is not currently implemented in the lowering.\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"<K1>/app/scripts/k1_ops_check.py\", line 213, in run_direct_conv\n    y_pos = vconv(x, w, b, case[\"stride\"], case[\"padding\"], case[\"dilation\"], 1)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/runtime/backend/_spacemit/ops/conv2d.py\", line 248, in conv2d\n    fused_im2col_bmm_kernel[grid](\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 370, in <lambda>\n    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1744, in run\n    kernel = self._first_run(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1634, in _first_run\n    return self._first_run_once(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1664, in _first_run_once\n    return self.fn.run(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntriton.compiler.errors.CompilationError: at 64:10:\n    oh = ohow // OW\n    ow = ohow % OW\n    window_h = oh * stride_h - pad_h\n    window_w = ow * stride_w - pad_w\n    bmm_pid = tl.maximum(pid - NUM_IM2COL_BLOCKS, 0)\n    pid_b = bmm_pid // NUM_BMM_TILES_PER_BATCH\n    local_tile = bmm_pid % NUM_BMM_TILES_PER_BATCH\n    pid_m = local_tile // NUM_TILES_N\n    pid_n = local_tile % NUM_TILES_N\n    block_m = pid_m * TILE_M\n    block_n = pid_n * TILE_N\n    bar = smt.global_mbarrier(0)\n          ^\nglobal_mbarrier Not supported: The syntax is not currently implemented in the lowering.\n"
+        }
+      },
+      {
+        "name": "c3_s2_p1_bias",
+        "input": [
+          1,
+          3,
+          9,
+          7
+        ],
+        "weight": [
+          4,
+          3,
+          3,
+          3
+        ],
+        "stride": 2,
+        "padding": 1,
+        "dilation": 1,
+        "bias": true,
+        "error": "Traceback (most recent call last):\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/core.py\", line 43, in wrapper\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/extra/smt/core.py\", line 179, in global_mbarrier\n    return smt_semantic.global_mbarrier(id, _semantic)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/extra/smt/semantic.py\", line 337, in global_mbarrier\n    raise NotImplementedError(\"global_mbarrier Not supported: The syntax is not currently implemented in the lowering.\")\nNotImplementedError: global_mbarrier Not supported: The syntax is not currently implemented in the lowering.\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"<K1>/app/scripts/k1_ops_check.py\", line 206, in run_direct_conv\n    y = vconv(x, w, b, padding=case[\"padding\"], stride=case[\"stride\"], dilation=case[\"dilation\"], groups=1)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/runtime/backend/_spacemit/ops/conv2d.py\", line 248, in conv2d\n    fused_im2col_bmm_kernel[grid](\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 370, in <lambda>\n    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1744, in run\n    kernel = self._first_run(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1634, in _first_run\n    return self._first_run_once(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1664, in _first_run_once\n    return self.fn.run(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 733, in run\n    kernel = self._do_compile(key, signature, device, constexprs, options, attrs, warmup)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 860, in _do_compile\n    kernel = self.compile(src, target=target, options=options.__dict__)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/compiler/compiler.py\", line 307, in compile\n    module = src.make_ir(target, options, codegen_fns, module_map, context)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/compiler/compiler.py\", line 80, in make_ir\n    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntriton.compiler.errors.CompilationError: at 64:10:\n    oh = ohow // OW\n    ow = ohow % OW\n    window_h = oh * stride_h - pad_h\n    window_w = ow * stride_w - pad_w\n    bmm_pid = tl.maximum(pid - NUM_IM2COL_BLOCKS, 0)\n    pid_b = bmm_pid // NUM_BMM_TILES_PER_BATCH\n    local_tile = bmm_pid % NUM_BMM_TILES_PER_BATCH\n    pid_m = local_tile // NUM_TILES_N\n    pid_n = local_tile % NUM_TILES_N\n    block_m = pid_m * TILE_M\n    block_n = pid_n * TILE_N\n    bar = smt.global_mbarrier(0)\n          ^\nglobal_mbarrier Not supported: The syntax is not currently implemented in the lowering.\n"
+      },
+      {
+        "name": "c3_s1_p0_nobias",
+        "input": [
+          1,
+          3,
+          8,
+          8
+        ],
+        "weight": [
+          4,
+          3,
+          3,
+          3
+        ],
+        "stride": 1,
+        "padding": 0,
+        "dilation": 1,
+        "bias": false,
+        "error": "Traceback (most recent call last):\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/core.py\", line 43, in wrapper\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/extra/smt/core.py\", line 179, in global_mbarrier\n    return smt_semantic.global_mbarrier(id, _semantic)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/extra/smt/semantic.py\", line 337, in global_mbarrier\n    raise NotImplementedError(\"global_mbarrier Not supported: The syntax is not currently implemented in the lowering.\")\nNotImplementedError: global_mbarrier Not supported: The syntax is not currently implemented in the lowering.\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"<K1>/app/scripts/k1_ops_check.py\", line 206, in run_direct_conv\n    y = vconv(x, w, b, padding=case[\"padding\"], stride=case[\"stride\"], dilation=case[\"dilation\"], groups=1)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/runtime/backend/_spacemit/ops/conv2d.py\", line 248, in conv2d\n    fused_im2col_bmm_kernel[grid](\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 370, in <lambda>\n    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1744, in run\n    kernel = self._first_run(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1634, in _first_run\n    return self._first_run_once(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1664, in _first_run_once\n    return self.fn.run(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 733, in run\n    kernel = self._do_compile(key, signature, device, constexprs, options, attrs, warmup)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 860, in _do_compile\n    kernel = self.compile(src, target=target, options=options.__dict__)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/compiler/compiler.py\", line 307, in compile\n    module = src.make_ir(target, options, codegen_fns, module_map, context)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/compiler/compiler.py\", line 80, in make_ir\n    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntriton.compiler.errors.CompilationError: at 64:10:\n    oh = ohow // OW\n    ow = ohow % OW\n    window_h = oh * stride_h - pad_h\n    window_w = ow * stride_w - pad_w\n    bmm_pid = tl.maximum(pid - NUM_IM2COL_BLOCKS, 0)\n    pid_b = bmm_pid // NUM_BMM_TILES_PER_BATCH\n    local_tile = bmm_pid % NUM_BMM_TILES_PER_BATCH\n    pid_m = local_tile // NUM_TILES_N\n    pid_n = local_tile % NUM_TILES_N\n    block_m = pid_m * TILE_M\n    block_n = pid_n * TILE_N\n    bar = smt.global_mbarrier(0)\n          ^\nglobal_mbarrier Not supported: The syntax is not currently implemented in the lowering.\n"
+      },
+      {
+        "name": "c4_s2_p1_bias",
+        "input": [
+          2,
+          4,
+          15,
+          13
+        ],
+        "weight": [
+          6,
+          4,
+          3,
+          3
+        ],
+        "stride": 2,
+        "padding": 1,
+        "dilation": 1,
+        "bias": true,
+        "error": "Traceback (most recent call last):\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/core.py\", line 43, in wrapper\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/extra/smt/core.py\", line 179, in global_mbarrier\n    return smt_semantic.global_mbarrier(id, _semantic)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/language/extra/smt/semantic.py\", line 337, in global_mbarrier\n    raise NotImplementedError(\"global_mbarrier Not supported: The syntax is not currently implemented in the lowering.\")\nNotImplementedError: global_mbarrier Not supported: The syntax is not currently implemented in the lowering.\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"<K1>/app/scripts/k1_ops_check.py\", line 206, in run_direct_conv\n    y = vconv(x, w, b, padding=case[\"padding\"], stride=case[\"stride\"], dilation=case[\"dilation\"], groups=1)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/runtime/backend/_spacemit/ops/conv2d.py\", line 248, in conv2d\n    fused_im2col_bmm_kernel[grid](\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 370, in <lambda>\n    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1744, in run\n    kernel = self._first_run(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1634, in _first_run\n    return self._first_run_once(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/flag_gems/utils/libentry.py\", line 1664, in _first_run_once\n    return self.fn.run(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 733, in run\n    kernel = self._do_compile(key, signature, device, constexprs, options, attrs, warmup)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/runtime/jit.py\", line 860, in _do_compile\n    kernel = self.compile(src, target=target, options=options.__dict__)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/compiler/compiler.py\", line 307, in compile\n    module = src.make_ir(target, options, codegen_fns, module_map, context)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<K1>/venv/lib/python3.12/site-packages/triton/compiler/compiler.py\", line 80, in make_ir\n    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntriton.compiler.errors.CompilationError: at 64:10:\n    oh = ohow // OW\n    ow = ohow % OW\n    window_h = oh * stride_h - pad_h\n    window_w = ow * stride_w - pad_w\n    bmm_pid = tl.maximum(pid - NUM_IM2COL_BLOCKS, 0)\n    pid_b = bmm_pid // NUM_BMM_TILES_PER_BATCH\n    local_tile = bmm_pid % NUM_BMM_TILES_PER_BATCH\n    pid_m = local_tile // NUM_TILES_N\n    pid_n = local_tile % NUM_TILES_N\n    block_m = pid_m * TILE_M\n    block_n = pid_n * TILE_N\n    bar = smt.global_mbarrier(0)\n          ^\nglobal_mbarrier Not supported: The syntax is not currently implemented in the lowering.\n"
+      }
+    ]
+  }
+}

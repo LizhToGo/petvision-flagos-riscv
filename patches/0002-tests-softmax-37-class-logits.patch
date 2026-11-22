@@ -1,0 +1,31 @@
+--- a/tests/test_softmax.py
++++ b/tests/test_softmax.py
+@@ -55,6 +55,28 @@
+     utils.gems_assert_close(res_out, ref_out, dtype, equal_nan=True)
+ 
+ 
++@pytest.mark.softmax
++@pytest.mark.parametrize("shape", [(1, 37)])
++@pytest.mark.parametrize("dtype", [torch.float32])
++def test_softmax_37_class_logits(shape, dtype):
++    """PetVision's real post-processing: 37 raw logits -> class probabilities.
++
++    The existing softmax suite only has 256-column shapes and does not cover the
++    37-class classifier head.  Deterministic FP32 forward, vendor function called
++    directly (the registered ATen dispatch is covered by the FlagGems backend
++    validation in the PetVision project, not by this numeric unit test).
++    """
++    generator = torch.Generator(device="cpu").manual_seed(0)
++    inp = torch.randn(shape, generator=generator, dtype=dtype).to(flag_gems.device)
++    ref_inp = utils.to_reference(inp, True)
++    ref_out = torch.nn.functional.softmax(ref_inp, dim=1)
++    res_out = flag_gems.softmax(inp, 1)
++
++    assert res_out.shape == ref_out.shape
++    assert res_out.dtype == dtype
++    utils.gems_assert_close(res_out, ref_out, dtype)
++
++
+ @pytest.mark.softmax_out
+ @pytest.mark.parametrize(
+     "shape",

@@ -1,0 +1,226 @@
+{
+  "schema": 1,
+  "kind": "k1_ops_check",
+  "generated_at": "2026-11-22T23:54:59+08:00",
+  "environment": {
+    "python": "3.12.3",
+    "machine": "riscv64",
+    "platform": "Linux-6.6.63-cloud-riscv64-with-glibc2.39",
+    "torch": "2.8.0+spacemit.0",
+    "torch_num_threads": 8,
+    "cpu_count": 8,
+    "affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "env": {
+      "GEMS_VENDOR": "spacemit",
+      "TRITON_CACHE_DIR": "<K1>/triton-cache"
+    },
+    "triton": "3.6.0",
+    "triton_backend": "CPUDriver",
+    "triton_target": "AICPUTarget(backend='cpu', arch='spacemit-a60', warp_size=0, core=4, ai_core=2, arch_id='0xA03C', num_threads=2, force_vector_interleave=2)",
+    "torchvision": "0.23.0",
+    "isa": "rv64imafdcv_zicbom_zicboz_zicntr_zicond_zicsr_zifencei_zihintpause_zihpm_zfh_zfhmin_zca_zcd_zba_zbb_zbc_zbs_zkt_zve32f_zve32x_zve64d_zve64f_zve64x_zvfh_zvfhmin_zvkt_sscofpmf_sstc_svinval_svnapot_svpbmt_ime",
+    "device_tree_model": "spacemit k1-x som board"
+  },
+  "flag_gems": {
+    "version": "0.0.0",
+    "vendor": "spacemit",
+    "device": "cpu",
+    "conv2d_module": "flag_gems.ops.conv2d",
+    "mean_dim_module": "_spacemit.ops.mean",
+    "softmax_module": "_spacemit.ops.softmax"
+  },
+  "mean_dim": {
+    "shape": [
+      1,
+      2048,
+      8,
+      8
+    ],
+    "shape_1x1": [
+      1,
+      2048,
+      1,
+      1
+    ],
+    "native_module": "torch",
+    "unregistered_dispatch": {
+      "aten.mean.dim": 1
+    },
+    "all_dispatch": {
+      "aten.mean.default": 1
+    },
+    "adaptive_pool_dispatch": {
+      "aten.mean.dim": 1
+    },
+    "include": "mean_dim",
+    "dispatch_attr_module": "_spacemit.ops.mean",
+    "kernel_runs": 1,
+    "timing_vendor_ms": {
+      "warmup": 3,
+      "repeat": 10,
+      "samples_ms": [
+        1.0888599790632725,
+        1.075943000614643,
+        1.1287340894341469,
+        1.1181929148733616,
+        1.0631517507135868,
+        1.202442217618227,
+        1.121525652706623,
+        1.066944096237421,
+        1.0625682771205902,
+        1.1086510494351387
+      ],
+      "median_ms": 1.0987555142492056,
+      "min_ms": 1.0625682771205902,
+      "max_ms": 1.202442217618227
+    },
+    "native_metrics": {
+      "out_shape": [
+        1,
+        2048,
+        1,
+        1
+      ],
+      "ref_shape": [
+        1,
+        2048,
+        1,
+        1
+      ],
+      "max_abs_err": 5.960464477539063e-08,
+      "mean_abs_err": 6.809969477217237e-09,
+      "allclose": true,
+      "has_nan": false
+    },
+    "timing_native_ms": {
+      "warmup": 3,
+      "repeat": 10,
+      "samples_ms": [
+        1.9337241537868977,
+        5.709088873118162,
+        0.5767419934272766,
+        0.4757433198392391,
+        0.454785767942667,
+        0.44895289465785027,
+        0.44557731598615646,
+        0.4432438872754574,
+        4.6775201335549355,
+        0.5727419629693031
+      ],
+      "median_ms": 0.5242426414042711,
+      "min_ms": 0.4432438872754574,
+      "max_ms": 5.709088873118162
+    },
+    "vendor_metrics": {
+      "out_shape": [
+        1,
+        2048,
+        1,
+        1
+      ],
+      "ref_shape": [
+        1,
+        2048,
+        1,
+        1
+      ],
+      "max_abs_err": "nan",
+      "mean_abs_err": "nan",
+      "allclose": false,
+      "has_nan": true
+    },
+    "vendor_vs_native": {
+      "out_shape": [
+        1,
+        2048,
+        1,
+        1
+      ],
+      "ref_shape": [
+        1,
+        2048,
+        1,
+        1
+      ],
+      "max_abs_err": "nan",
+      "mean_abs_err": "nan",
+      "allclose": false,
+      "has_nan": true
+    },
+    "one_by_one": {
+      "native_metrics": {
+        "out_shape": [
+          1,
+          2048,
+          1,
+          1
+        ],
+        "ref_shape": [
+          1,
+          2048,
+          1,
+          1
+        ],
+        "max_abs_err": 0.0,
+        "mean_abs_err": 0.0,
+        "allclose": true,
+        "has_nan": false
+      },
+      "vendor_metrics": {
+        "out_shape": [
+          1,
+          2048,
+          1,
+          1
+        ],
+        "ref_shape": [
+          1,
+          2048,
+          1,
+          1
+        ],
+        "max_abs_err": "nan",
+        "mean_abs_err": "nan",
+        "allclose": false,
+        "has_nan": true
+      },
+      "vendor_vs_native": {
+        "out_shape": [
+          1,
+          2048,
+          1,
+          1
+        ],
+        "ref_shape": [
+          1,
+          2048,
+          1,
+          1
+        ],
+        "max_abs_err": "nan",
+        "mean_abs_err": "nan",
+        "allclose": false,
+        "has_nan": true
+      }
+    },
+    "triton_cache": {
+      "root": "<K1>/triton-cache",
+      "new_files": 28,
+      "top_level_entries": [
+        "4H7NTMGB5FSNQDOA7PJVE5H4UKLDZHFRUO5GMI22YDQEHIY6VTYA",
+        "IMRQKF3E3TVT3KE3AZGB7BVLKFOXDVUPRWTG2ZA46B4R3HCLRSEQ",
+        "JG6QYOSUJRURF666LOLGZL3FLTPN4GU3UGFSS4IX5XPULWQU3Y6Q",
+        "P2TAEVPU64YRMNW5ZZAMG6NUWJPXZMILZMI6ITU6KMCORTF6J5CQ"
+      ]
+    }
+  }
+}
