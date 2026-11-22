@@ -1,0 +1,296 @@
+{
+  "schema": 1,
+  "kind": "petvision_resnet50_forward",
+  "generated_at": "2026-11-22T22:16:56+08:00",
+  "environment": {
+    "python": "3.13.12",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "machine": "AMD64",
+    "cpu_count": 24,
+    "torch": "2.11.0+cu128",
+    "torch_cuda": "12.8",
+    "torch_mkldnn": true,
+    "env": {},
+    "triton": "unavailable: ModuleNotFoundError",
+    "torchvision": "0.26.0+cu128",
+    "flag_gems": "unavailable: ModuleNotFoundError"
+  },
+  "weights": {
+    "path": "C:\\Users\\27978\\Downloads\\111\\resnet50-256-color-raw-20261103-212216-24717\\raw\\best.pt",
+    "size_bytes": 284158590,
+    "mtime_ns_before": 1793715695911813400,
+    "opened_read_only": true,
+    "mtime_ns_after": 1793715695911813400,
+    "unchanged": true
+  },
+  "config": {
+    "backend": "torch",
+    "device": "cpu",
+    "enable_scope": "conv2d",
+    "batch": 1,
+    "image_size_arg": 0,
+    "warmup": 1,
+    "repeat": 3,
+    "seed": 0,
+    "atol": 0.002,
+    "rtol": 0.002
+  },
+  "checkpoint": {
+    "architecture": "resnet50",
+    "image_size": 256,
+    "mode": "raw",
+    "precision": "fp32",
+    "num_classes": 37,
+    "class_names": [
+      "Abyssinian",
+      "Bengal",
+      "Birman",
+      "Bombay",
+      "British_Shorthair",
+      "Egyptian_Mau",
+      "Maine_Coon",
+      "Persian",
+      "Ragdoll",
+      "Russian_Blue",
+      "Siamese",
+      "Sphynx",
+      "american_bulldog",
+      "american_pit_bull_terrier",
+      "basset_hound",
+      "beagle",
+      "boxer",
+      "chihuahua",
+      "english_cocker_spaniel",
+      "english_setter",
+      "german_shorthaired",
+      "great_pyrenees",
+      "havanese",
+      "japanese_chin",
+      "keeshond",
+      "leonberger",
+      "miniature_pinscher",
+      "newfoundland",
+      "pomeranian",
+      "pug",
+      "saint_bernard",
+      "samoyed",
+      "scottish_terrier",
+      "shiba_inu",
+      "staffordshire_bull_terrier",
+      "wheaten_terrier",
+      "yorkshire_terrier"
+    ],
+    "state_dict": {
+      "state_dict_entries": 320,
+      "conv_weights_4d": 53,
+      "conv_weight_shapes": {
+        "weight=[1024, 256, 1, 1]": 6,
+        "weight=[1024, 512, 1, 1]": 1,
+        "weight=[128, 128, 3, 3]": 4,
+        "weight=[128, 256, 1, 1]": 1,
+        "weight=[128, 512, 1, 1]": 3,
+        "weight=[2048, 1024, 1, 1]": 1,
+        "weight=[2048, 512, 1, 1]": 3,
+        "weight=[256, 1024, 1, 1]": 5,
+        "weight=[256, 256, 3, 3]": 6,
+        "weight=[256, 512, 1, 1]": 1,
+        "weight=[256, 64, 1, 1]": 4,
+        "weight=[512, 1024, 1, 1]": 1,
+        "weight=[512, 128, 1, 1]": 4,
+        "weight=[512, 2048, 1, 1]": 2,
+        "weight=[512, 256, 1, 1]": 1,
+        "weight=[512, 512, 3, 3]": 3,
+        "weight=[64, 256, 1, 1]": 2,
+        "weight=[64, 3, 7, 7]": 1,
+        "weight=[64, 64, 1, 1]": 1,
+        "weight=[64, 64, 3, 3]": 3
+      }
+    }
+  },
+  "model": {
+    "conv2d_layers": 53,
+    "conv_transpose2d_layers": 0,
+    "grouped_conv2d_layers": 0,
+    "conv2d_configs": {
+      "kernel=[7, 7] stride=[2, 2] padding=[3, 3] dilation=[1, 1] groups=1 bias=False": {
+        "count": 1,
+        "in_channels": [
+          3
+        ],
+        "out_channels": [
+          64
+        ]
+      },
+      "kernel=[1, 1] stride=[1, 1] padding=[0, 0] dilation=[1, 1] groups=1 bias=False": {
+        "count": 33,
+        "in_channels": [
+          64,
+          64,
+          64,
+          256,
+          64,
+          256,
+          64,
+          256,
+          128,
+          512,
+          128,
+          512,
+          128,
+          512,
+          128,
+          512,
+          256,
+          1024,
+          256,
+          1024,
+          256,
+          1024,
+          256,
+          1024,
+          256,
+          1024,
+          256,
+          1024,
+          512,
+          2048,
+          512,
+          2048,
+          512
+        ],
+        "out_channels": [
+          64,
+          256,
+          256,
+          64,
+          256,
+          64,
+          256,
+          128,
+          512,
+          128,
+          512,
+          128,
+          512,
+          128,
+          512,
+          256,
+          1024,
+          256,
+          1024,
+          256,
+          1024,
+          256,
+          1024,
+          256,
+          1024,
+          256,
+          1024,
+          512,
+          2048,
+          512,
+          2048,
+          512,
+          2048
+        ]
+      },
+      "kernel=[3, 3] stride=[1, 1] padding=[1, 1] dilation=[1, 1] groups=1 bias=False": {
+        "count": 13,
+        "in_channels": [
+          64,
+          64,
+          64,
+          128,
+          128,
+          128,
+          256,
+          256,
+          256,
+          256,
+          256,
+          512,
+          512
+        ],
+        "out_channels": [
+          64,
+          64,
+          64,
+          128,
+          128,
+          128,
+          256,
+          256,
+          256,
+          256,
+          256,
+          512,
+          512
+        ]
+      },
+      "kernel=[3, 3] stride=[2, 2] padding=[1, 1] dilation=[1, 1] groups=1 bias=False": {
+        "count": 3,
+        "in_channels": [
+          128,
+          256,
+          512
+        ],
+        "out_channels": [
+          128,
+          256,
+          512
+        ]
+      },
+      "kernel=[1, 1] stride=[2, 2] padding=[0, 0] dilation=[1, 1] groups=1 bias=False": {
+        "count": 3,
+        "in_channels": [
+          256,
+          512,
+          1024
+        ],
+        "out_channels": [
+          512,
+          1024,
+          2048
+        ]
+      }
+    }
+  },
+  "input": {
+    "shape": [
+      1,
+      3,
+      256,
+      256
+    ],
+    "seed": 0,
+    "device": "cpu"
+  },
+  "native_torch": {
+    "timing": {
+      "warmup": 1,
+      "count": 3,
+      "sync": "none (eager CPU execution)",
+      "samples_ms": [
+        47.87609999766573,
+        48.60369995003566,
+        46.50449997279793
+      ],
+      "median_ms": 47.87609999766573,
+      "p50_ms": 47.87609999766573,
+      "mean_ms": 47.66143330683311,
+      "min_ms": 46.50449997279793,
+      "max_ms": 48.60369995003566,
+      "stdev_ms": 0.8703338352699287
+    },
+    "device": "cpu",
+    "conv2d_calls_total": 265,
+    "conv2d_calls_per_forward": 53.0,
+    "compared_to": "same-process native PyTorch",
+    "metrics": {
+      "note": "no --reference-logits given; this run is its own reference"
+    },
+    "top1_index": 25,
+    "logits_file": "C:\\Users\\27978\\Desktop\\petvision-flagos-riscv\\results\\local_x86_cpu_20261122\\model\\logits.json"
+  },
+  "passed": true
+}

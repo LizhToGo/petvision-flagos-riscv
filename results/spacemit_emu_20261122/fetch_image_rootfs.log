@@ -1,0 +1,16 @@
+layers=11 total_compressed_GB=11.47
+layer[0] 0.03GB compressed, 3443 entries, 2s, free=31.2GB
+layer[1] 0.00GB compressed, 4 entries, 0s, free=31.2GB
+layer[2] 0.56GB compressed, 23023 entries, 42s, free=29.6GB
+layer[3] 0.05GB compressed, 7736 entries, 6s, free=29.4GB
+layer[4] 8.86GB compressed, 55066 entries, 686s, free=16.6GB
+layer[5] 0.00GB compressed, 1 entries, 0s, free=16.6GB
+layer[6] 0.00GB compressed, 6 entries, 0s, free=17.3GB
+layer[7] 0.00GB compressed, 0 entries, 0s, free=17.3GB
+layer[8] 0.46GB compressed, 2 entries, 41s, free=16.8GB
+layer[9] 0.90GB compressed, 7713 entries, 79s, free=14.2GB
+layer[10] 0.60GB compressed, 18223 entries, 52s, free=12.6GB
+DONE rootfs=/var/tmp/sm-rootfs elapsed=907s free=12.6GB
+probe usr/bin/python3: exists=True
+probe bin/bash: exists=True
+probe etc/os-release: exists=True

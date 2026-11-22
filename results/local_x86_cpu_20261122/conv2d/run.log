@@ -1,0 +1,6 @@
+wrote results\local_x86_cpu_20261122\conv2d\conv2d.json
+  [PASS] unet_conv3x3_pad1_bias: max_abs_err=5.722e-06 median=0.033ms
+  [PASS] stride2_pad1_bias_odd_input: max_abs_err=1.907e-06 median=0.026ms
+  [PASS] valid_nopad_nobias_batch2: max_abs_err=3.815e-06 median=0.140ms
+  [PASS] dilation2_pad2_bias: max_abs_err=2.861e-06 median=0.052ms
+  [PASS] petvision_resnet50_stem_7x7_s2_pad3: max_abs_err=3.052e-05 median=0.659ms

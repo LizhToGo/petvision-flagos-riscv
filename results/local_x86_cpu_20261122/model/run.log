@@ -1,0 +1,2 @@
+wrote results\local_x86_cpu_20261122\model\petvision_forward.json
+  native torch: 47.88 ms median, 53 conv2d calls/forward, max_abs_err=self-reference

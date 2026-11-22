@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "kind": "spacemit_emulation_attempt",
+  "generated_at": "2026-11-22T22:16:00+08:00",
+  "outcome": "blocked",
+  "summary": "The official SpacemiT x64-emulation image was pulled and unpacked without Docker (18 GB rootfs, 907 s) and chroot execution works, but the image tag flagtree-spacemit-py312-torch2.10.0-ubuntu24.04:202607-3.6-base does not contain triton, flagtree or the RISC-V spine-rpc-server runtime, so no SpacemiT kernel could be compiled or executed. No SpacemiT/RVV execution evidence was obtained.",
+  "host": {
+    "arch": "x86_64",
+    "cpu_count": 2,
+    "ram_mib": 1962,
+    "swap_mib": 2048,
+    "rootfs_free_gb_before": 31.2,
+    "tmp_filesystem": "tmpfs 982 MiB (first extraction attempt filled it and was discarded)",
+    "docker": "installed, sudo docker works, containerd snapshotter"
+  },
+  "image": {
+    "reference": "harbor.baai.ac.cn/flagtree/flagtree-spacemit-py312-torch2.10.0-ubuntu24.04:202607-3.6-base",
+    "manifest_config_digest": "sha256:49afe94e8aa50161ab8176b3339169e283654b4064db7ed3c1adfe0d8c2c44b8",
+    "layers": 11,
+    "compressed_bytes_total": 11470000000,
+    "compressed_gb": 11.47,
+    "largest_layer_gb": 8.86,
+    "why_not_docker_pull": "docker pull keeps compressed blobs plus unpacked containerd snapshots (~31 GB), more than the 31.2 GB free disk; streaming unpack keeps only the rootfs (18 GB).",
+    "unpack_method": "tools/fetch_oci_rootfs.py (streamed, no layer tarballs written)",
+    "unpack_elapsed_s": 907,
+    "rootfs_size_gb": 18
+  },
+  "chroot_probe": {
+    "python": "3.12.3 (main, Jan 22 2026, 20:57:42) [GCC 13.3.0]",
+    "pip_packages_relevant": {
+      "torch": "2.10.0",
+      "torchvision": "0.25.0",
+      "numpy": "2.4.2"
+    },
+    "triton": "ModuleNotFoundError: No module named 'triton'",
+    "flagtree": "ModuleNotFoundError: No module named 'flagtree'",
+    "spine_rpc_server_binary": "absent (find over the whole rootfs)",
+    "flagtree_spacemit_runtime_dir": "absent (~/.flagtree/spacemit missing)",
+    "toolchain_present": "/opt/spacemit/spacemit-toolchain-linux-glibc-x86_64-ame-20260612"
+  },
+  "network": {
+    "harbor_registry": "reachable, ~13 MiB/s",
+    "ks3_image_archive": "reachable, ~12 MB/s",
+    "github_releases": "spacemit-runtime asset: 0 bytes in 30 s (curl timeout)",
+    "github_git": "git ls-remote https://github.com/flagos-ai/FlagTree.git HEAD -> 1c34edb4669d12a51ed383cd2292dd6a85f75565"
+  },
+  "blockers": [
+    "image 202607-3.6-base ships torch/torchvision but no triton/flagtree package and no spine-rpc-server: it is the build-from-source base, not a runnable SpacemiT backend",
+    "installing the SpacemiT plugin needs FlagTree sources plus RISC-V runtime assets from GitHub Releases (blocked from this host)",
+    "1962 MiB RAM / 2 vCPU is below a practical LLVM/Triton build requirement"
+  ],
+  "commands_executed": [
+    "sudo python3 /var/tmp/sm_fetch.py /var/tmp/sm-rootfs   # streamed OCI layers",
+    "sudo mount --bind /proc /var/tmp/sm-rootfs/proc (same for /sys, /dev)",
+    "sudo chroot /var/tmp/sm-rootfs /usr/bin/env -i HOME=/root PATH=... bash -lc 'python3 -m pip list'",
+    "sudo chroot /var/tmp/sm-rootfs ... 'python3 -c \"import triton\"'  # ModuleNotFoundError"
+  ],
+"cleanup": {
+    "rootfs_removed": true,
+    "bind_mounts_removed": true,
+    "docker_images_created": 0,
+    "containers_created": 0,
+    "host_free_gb_after": 30.0,
+    "pre_existing_containers_untouched": true
+  },
+  "next_steps": [
+    "run this repository's scripts inside the FlagTree spacemit3.6 CI runner (self-hosted, jdsk-qemu v10.0.2 + spine-rpc-server) or on a K3 board",
+    "build FlagTree triton==3.6.0+spacemit.a5 from source on a host with >=32 GB RAM and the RISC-V runtime tarballs"
+  ]
+}

@@ -1,0 +1,19 @@
+# Scratch clone of upstream FlagGems (pinned in third_party/FLAGGEMS_COMMIT.txt).
+# It is re-created by the commands in README.md; never commit it.
+third_party/FlagGems/
+
+# Course checkpoints are never copied into this repository.
+*.pt
+*.pth
+weights/
+
+# Python caches and local virtual environments.
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Rootfs / container scratch data.
+*.tar.gz
+sm-rootfs/
