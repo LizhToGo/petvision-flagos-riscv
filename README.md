@@ -266,6 +266,8 @@ python petvision_forward.py --backend torch --threads 1 --weights best_slim.pt \
 ```bash
 export PETVISION_K1="$HOME/petvision-k1"
 export PETVISION_REPO="/path/to/petvision-flagos-riscv"
+cp "$PETVISION_REPO/scripts/k1_ops_check.py" "$PETVISION_K1/app/scripts/k1_ops_check.py"
+cp "$PETVISION_REPO/petvision_forward.py" "$PETVISION_K1/app/petvision_forward.py"
 
 # Conv2d PR branch: install the fixed source in the isolated K1 environment.
 git -C "$PETVISION_K1/FlagGems" fetch https://github.com/LizhToGo/FlagGems.git \
