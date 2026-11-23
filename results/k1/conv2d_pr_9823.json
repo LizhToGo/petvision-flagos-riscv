@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "kind": "k1_conv2d_upstream_fix",
+  "status": "validated_on_k1",
+  "baseline": {
+    "flag_gems_commit": "43c9cab402f7e286de9cbfc6238ea3e7bfe354cb",
+    "failure": "SpacemiT fused Conv2d calls smt.global_mbarrier; Python semantic raises NotImplementedError. Restoring the dead builder path reaches prebuilt spine-opt error: custom op xsmt.global_mbarrier_init is unknown.",
+    "additional_bug": "The fused im2col layout does not match weight.reshape(OC, -1) channel/kernel order."
+  },
+  "upstream": {
+    "repository": "flagos-ai/FlagGems",
+    "fork": "https://github.com/LizhToGo/FlagGems",
+    "pull_request": "https://github.com/flagos-ai/FlagGems/pull/9823",
+    "commit": "5481b6a3e84d1a5a5bb4087cf9a9f28ae88d1335",
+    "branch": "spacemit-conv2d-two-kernel",
+    "files": [
+      "src/flag_gems/runtime/backend/_spacemit/ops/conv2d.py",
+      "src/flag_gems/runtime/backend/_spacemit/ops/__init__.py",
+      "tests/test_conv2d.py"
+    ]
+  },
+  "environment": {
+    "machine": "riscv64",
+    "os": "Bianbu 2.3 / Linux 6.6.63-cloud",
+    "python": "3.12.3",
+    "torch": "2.8.0+spacemit.0",
+    "triton": "3.6.0+spacemit.a5",
+    "vendor": "spacemit",
+    "device": "cpu",
+    "threads": 8
+  },
+  "operator": {
+    "module": "_spacemit.ops.conv2d",
+    "signature": "(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1)",
+    "kernels_per_call": {
+      "im2col_kernel": 1,
+      "bmm_kernel": 1
+    },
+    "max_abs_error_vs_fp64": {
+      "c3_s1_p1_bias": 2.86102294921875e-06,
+      "c3_s2_p1_bias": 1.430511474609375e-06,
+      "c4_valid_nobias": 2.86102294921875e-06,
+      "stem_256": 3.0517578125e-05
+    },
+    "allclose_at_1e-3": true,
+    "finite": true,
+    "positional_stride_padding": {
+      "stride_2_padding_1_shape": [1, 4, 5, 4],
+      "stride_1_padding_2_shape": [1, 4, 11, 9]
+    },
+    "unsupported_inference_scope": [
+      "groups > 1",
+      "string padding",
+      "FP16"
+    ],
+    "autograd": "Grad-enabled calls delegate to generic Conv2d; direct and registered gradients matched within 5.73e-06 and vendor kernel launches were zero.",
+    "upstream_tests_on_k1": "5 passed, 72 deselected"
+  },
+  "petvision": {
+    "weights": "$HOME/petvision-k1/private/best_slim.pt",
+    "image": "$HOME/petvision-k1/private/Abyssinian_201.jpg",
+    "conv2d_calls": 53,
+    "im2col_kernel_launches": 53,
+    "bmm_kernel_launches": 53,
+    "all_conv_used_vendor_kernels": true,
+    "no_native_conv_fallback": true,
+    "top1": "Abyssinian",
+    "top1_probability": 0.9976438563,
+    "max_abs_error_vs_x86": 7.62939453125e-06,
+    "max_abs_error_vs_k1_native": 3.814697265625e-06,
+    "allclose_at_2e-3": true
+  },
+  "performance_ms_median": {
+    "full_model_native": 2097.0,
+    "full_model_vendor_conv2d": 4135.6,
+    "stem_native": 129.7,
+    "stem_vendor_conv2d": 142.1,
+    "speedup_claim": false
+  },
+  "reproduction": {
+    "fetch": "git -C $HOME/petvision-k1/FlagGems fetch https://github.com/LizhToGo/FlagGems.git spacemit-conv2d-two-kernel",
+    "checkout": "git -C $HOME/petvision-k1/FlagGems checkout --detach 5481b6a3e84d1a5a5bb4087cf9a9f28ae88d1335",
+    "operator": "python scripts/k1_ops_check.py --only conv2d --out /tmp/k1_conv2d_pr",
+    "model": "python petvision_forward.py --backend flag_gems --enable-ops conv2d --threads 8 --warmup 1 --repeat 3 --weights ../private/best_slim.pt --image ../private/Abyssinian_201.jpg --reference-logits ../private/x86_image_logits.json --out /tmp/k1_petvision_conv2d_pr"
+  }
+}

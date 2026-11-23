@@ -414,8 +414,8 @@ def main(argv=None) -> int:
     except Exception:
         payload["fatal_error"] = traceback.format_exc(limit=20)
 
-    # Explicit success criteria.  conv2d/mean are recorded failures: their JSON
-    # is evidence, not a pass.  Only softmax has a production success condition.
+    # A selected operator is a strict check; ``all`` remains a collection mode
+    # because it intentionally records known failures alongside passing ops.
     if "softmax" in payload:
         sm = payload["softmax"]
         payload["operator_passed"] = bool(
@@ -424,19 +424,23 @@ def main(argv=None) -> int:
             and sm.get("vendor_vs_native", {}).get("allclose")
         )
     if "mean_dim" in payload:
-        payload["mean_dim"]["operator_passed"] = bool(
-            payload["mean_dim"].get("vendor_metrics", {}).get("allclose")
-        )
+        mean_passed = bool(payload["mean_dim"].get("vendor_metrics", {}).get("allclose"))
+        payload["mean_dim"]["operator_passed"] = mean_passed
+        if args.only == "mean":
+            payload["operator_passed"] = mean_passed
     if "direct_conv2d" in payload:
         cases = payload["direct_conv2d"].get("cases", [])
-        payload["direct_conv2d"]["operator_passed"] = bool(cases) and all(
+        conv_passed = bool(cases) and all(
             c.get("metrics", {}).get("allclose") for c in cases
         )
+        payload["direct_conv2d"]["operator_passed"] = conv_passed
+        if args.only == "conv2d":
+            payload["operator_passed"] = conv_passed
     collected = "fatal_error" not in payload
-    if args.only == "softmax":
+    if args.only in ("softmax", "conv2d", "mean"):
         payload["passed"] = bool(collected and payload.get("operator_passed"))
     else:
-        # Recording a failure reproduction counts as a successful collection.
+        # Collection mode preserves the original failure-reproduction contract.
         payload["passed"] = bool(collected)
         payload["failure_reproduction"] = True
     path = out_dir / "k1_ops_check.json"

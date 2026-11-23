@@ -16,11 +16,11 @@
 | `aten._softmax` 厂商 kernel | ✅ 数值 `5.96e-08`，真实 kernel launch 1 次 | `results/k1/ops_softmax.json` |
 | 真图 → 37 类概率（仅厂商 softmax） | ✅ 1 次 `softmax_kernel_spacemit`，概率差 `1.42e-14`，Top-1 一致 | `results/k1/flag_gems_softmax_image.json` |
 | 厂商 `mean.dim`（ResNet 全局池化） | K1 真机修复通过，两项回归测试通过 | [实测数据](results/k1/mean_dim_pr_9773.json) · [FlagGems PR #9773](https://github.com/flagos-ai/FlagGems/pull/9773) |
-| 厂商 `conv2d` kernel | ❌ K1 Triton lowering 明确不支持，最小用例见下 | `results/k1/conv2d_vendor_failure.json` |
-| 通用 FlagGems `conv2d` | ✅ 数值 `9.54e-07`（仅基线，未用于最终推理） | 同上 |
+| 厂商 `conv2d` kernel | ✅ K1 真机修复；53/53 次卷积走两阶段厂商 kernel | [实测数据](results/k1/conv2d_pr_9823.json) · [FlagGems PR #9823](https://github.com/flagos-ai/FlagGems/pull/9823) |
+| 通用 FlagGems `conv2d` | ✅ 数值 `9.54e-07`（旧基线，非最终路径） | `results/k1/conv2d_vendor_failure.json` |
 
-固定版的真图结果启用厂商 `aten._softmax` 后处理。上游 PR 分支另用同一权重和真图
-验证了厂商 `mean.dim` 全局池化。两次实验的 53 次卷积均由原生 PyTorch 执行。
+旧版固定环境的真图结果启用厂商 `aten._softmax` 后处理；`mean.dim` 修复见 PR #9773。
+Conv2d 修复版使用同一权重、同一真图在 K1 上完成 53/53 次厂商卷积验证；性能结果不声称加速。
 
 ## 2. 环境（K1 真机实测）
 
@@ -33,7 +33,7 @@
 | torchvision | `0.23.0`（cp312/linux_riscv64） |
 | Triton | `3.6.0+spacemit.a5`；`triton.__version__` 报 `3.6.0` |
 | Triton 驱动 | `CPUDriver`，target `AICPUTarget(arch='spacemit-a60', core=4, ai_core=2, num_threads=2)` |
-| FlagGems | commit `43c9cab402f7e286de9cbfc6238ea3e7bfe354cb`（`0.0.0`，源码安装） |
+| FlagGems | 基线 commit `43c9cab402f7e286de9cbfc6238ea3e7bfe354cb`；Conv2d 修复 commit `5481b6a3e84d1a5a5bb4087cf9a9f28ae88d1335`（均为源码安装） |
 | vendor | `GEMS_VENDOR=spacemit`，`flag_gems.device == "cpu"` |
 
 厂商 wheel 缺少的共享库**没有装进系统**：用 `apt-get download` +
@@ -150,30 +150,44 @@ CPU 亲和 0–7。seed 0 预热 3 次、测量 10 次。
 
 ## 5. 失败与未解决问题（不掩盖）
 
-### 5.1 厂商 `conv2d`：K1 明确不支持
+### 5.1 厂商 `conv2d`：拆分 barrier 后在 K1 通过
 
-最小复现（`scripts/k1_ops_check.py --only conv2d`，4 个小 shape 全部失败）：
+固定版原实现把 im2col 和 GEMM 融合在一个 kernel 中，并调用
+`smt.global_mbarrier`。K1 的 Triton semantic 层直接报：
 
 ```
 NotImplementedError: global_mbarrier Not supported: The syntax is not currently
 implemented in the lowering.
 ```
 
-来源：`_spacemit/ops/conv2d.py` 的融合 im2col+GEMM kernel 使用
-`smt.global_mbarrier`。编译期另有 `'+xsmtvdoti' is not a recognized feature for
-this target` 警告（K1 目标缺该特性）。因此该 kernel **不能**作为 K1 上游候选，
-旧 `patches/` 中“取消注释即修复”的补丁已删除。
+把 wheel 中已有但被 Python 层挡住的 builder 路径恢复后，预编译
+`spine-opt` 又报 `custom op 'xsmt.global_mbarrier_init' is unknown`；这条路径需要
+重建 FlagTree 编译器。此外，原融合 kernel 的 im2col 列布局与
+`weight.reshape(OC, -1)` 不一致，不能只取消 `raise`。
 
-代码审查另有两处**未运行验证**的隐患，仅记录、不声称已修复：
+上游修复改为两个顺序 kernel：
 
-* 函数签名是 `conv2d(input, weight, bias, padding, stride, …)`，而 ATen 的
-  `conv2d` 是 `(input, weight, bias, stride, padding, …)`；直接注册会交换
-  stride/padding（本次因编译失败，未做运行时断言）。
-* im2col 把 C 方向连续写入 `K = C*KH*KW` 的列，布局只在 `C` 块对齐/尾部覆盖
-  假设下成立；没有在 K1 上获得可运行证据。
+1. `im2col_kernel` 按 `[channel][kernel_h][kernel_w]` 写入临时 buffer；
+2. `bmm_kernel` 使用 K 分块和 `smt.dot` 累加，再一次性加 bias。
 
-**通用** FlagGems `conv2d` 基线在 K1 上数值正确（max_abs `9.54e-07`，输入
-`1×4×9×7`，stride 2/pad 1），但它不是厂商 kernel，也没有用于最终推理。
+两个 kernel 都限制为最多 512 个程序并用 grid-stride loop，覆盖 K1 的 stem 大网格；
+尾部列和 bias 使用掩码。当前显式支持 FP32、`groups=1`、整数或二元组
+stride/padding/dilation；训练调用保留通用 FlagGems autograd 路径，其他推理参数
+显式抛出 `NotImplementedError`。
+
+K1 直接调用与 `use_gems(include=["conv2d"])` 注册调用均通过；4 个算子用例和
+256×256 ResNet stem 全部 finite、`allclose(1e-3)`，stem 对 FP64 的最大绝对误差
+为 `3.05e-05`。上游 `tests/test_conv2d.py -k spacemit` 为 **5 passed,
+72 deselected**。
+
+固定 PetVision 权重和 `Abyssinian_201.jpg` 的 53 次卷积全部使用
+`im2col_kernel`/`bmm_kernel`（各 53 次），没有 native Conv2d fallback；Top-1
+仍为 `Abyssinian`，相对 x86 logits 最大误差 `7.63e-06`，相对 K1 原生路径
+`3.81e-06`。同机完整模型 median 为原生 `2097.0 ms`、厂商 Conv2d
+`4135.6 ms`；stem 为 `129.7 ms`、`142.1 ms`，因此不声称性能收益。
+
+[上游 PR #9823 与复现命令](https://github.com/flagos-ai/FlagGems/pull/9823)；
+修复前的原始失败仍保留在 `results/k1/conv2d_vendor_failure.json`。
 
 ### 5.2 厂商 `mean.dim` 的固定版故障与上游修复
 
@@ -201,16 +215,15 @@ re-assigned to fp64 in loop! Please make sure that the type stays consistent.')
   ResNet-50 分类路径。
 * 未做 RVV/SMT 优化；没有可靠热点收益证据。
 
-## 6. 上游候选（分级）
-
-| 文件 | 级别 | 内容 |
-| --- | --- | --- |
-| `patches/0002-tests-softmax-37-class-logits.patch` | ✅ 可提交 | `tests/test_softmax.py` 新增确定性 FP32 `(1,37)` 前向数值用例，直接调用 `flag_gems.softmax` 对照 PyTorch。最终补丁在 K1 上复跑 `1 passed, 112 deselected`。|
+| `tests/test_softmax.py` | ✅ 可提交 | `patches/0002-tests-softmax-37-class-logits.patch`，确定性 FP32 `(1,37)` 前向用例。|
+| SpacemiT `conv2d` | ✅ 可提交 | 两阶段 im2col+BMM 修复及回归测试，K1 真机和 PetVision 通过；[FlagGems PR #9823](https://github.com/flagos-ai/FlagGems/pull/9823)。|
 | `patches/0001-triton-libdevice-hypot-compat.patch` | ⚠️ 环境兼容 | 仅为固定版在 SpacemiT Triton 上可导入；未证明其他后端需要 |
 | `patches/0003-EXPERIMENTAL-spacemit-mean-dim-k1-does-not-fix.patch` | ❌ 不可提交 | 能过编译但结果 NaN，保留为失败复现 |
 
-固定版的失败记录在 `results/k1/ops_mean_k1_failure.json`。修复版的两个回归用例位于
-上游 PR 的 `tests/test_mean.py`，PetVision 对照数据见 `results/k1/mean_dim_pr_9773.json`。
+固定版的失败记录在 `results/k1/ops_mean_k1_failure.json` 和
+`results/k1/conv2d_vendor_failure.json`。修复版的 mean.dim 回归用例位于
+PR #9773，Conv2d 回归用例位于 PR #9823；PetVision 对照数据分别见
+`results/k1/mean_dim_pr_9773.json` 和 `results/k1/conv2d_pr_9823.json`。
 
 ## 7. K1 部署（保留，供验收）
 
@@ -251,7 +264,30 @@ python petvision_forward.py --backend torch --threads 1 --weights best_slim.pt \
 验收命令（板端）：
 
 ```bash
-cd "$HOME/petvision-k1/app" && . scripts/k1_env.sh
+export PETVISION_K1="$HOME/petvision-k1"
+export PETVISION_REPO="/path/to/petvision-flagos-riscv"
+
+# Conv2d PR branch: install the fixed source in the isolated K1 environment.
+git -C "$PETVISION_K1/FlagGems" fetch https://github.com/LizhToGo/FlagGems.git \
+  spacemit-conv2d-two-kernel
+git -C "$PETVISION_K1/FlagGems" checkout --detach \
+  5481b6a3e84d1a5a5bb4087cf9a9f28ae88d1335
+git -C "$PETVISION_K1/FlagGems" apply \
+  "$PETVISION_REPO/patches/0001-triton-libdevice-hypot-compat.patch"
+SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 "$PETVISION_K1/venv/bin/python" -m pip install \
+  --no-deps --no-build-isolation "$PETVISION_K1/FlagGems"
+
+cd "$PETVISION_K1/app" && . scripts/k1_env.sh
+python scripts/k1_ops_check.py --only conv2d --out /tmp/k1_conv2d_pr
+cd "$PETVISION_K1/FlagGems" && python -m pytest tests/test_conv2d.py -k spacemit -q
+cd "$PETVISION_K1/app"
+python petvision_forward.py --backend flag_gems --enable-ops conv2d \
+  --require-vendor spacemit --threads 8 --warmup 1 --repeat 3 \
+  --weights ../private/best_slim.pt --image ../private/Abyssinian_201.jpg \
+  --reference-logits ../private/x86_image_logits.json \
+  --out /tmp/k1_petvision_conv2d_pr
+
+# Softmax-only acceptance (keeps the original deployment path).
 python scripts/k1_ops_check.py --only softmax --out /tmp/k1_accept_ops
 python petvision_forward.py --backend torch --threads 8 --warmup 1 --repeat 5 \
   --weights ../private/best_slim.pt --image ../private/Abyssinian_201.jpg \
@@ -262,15 +298,10 @@ python petvision_forward.py --backend flag_gems --enable-ops softmax --threads 8
   --image ../private/Abyssinian_201.jpg \
   --reference-logits ../private/x86_image_logits.json \
   --out /tmp/k1_accept_softmax
-# 仅 --only softmax 用严格条件（kernel_runs==1 且两份数值通过）决定退出码；
-# --only conv2d/mean 的退出码只表示“失败证据收集成功”，JSON 中 operator_passed=false。
 python scripts/k1_ab_model.py --threads 8 --pairs 10 --weights ../private/best_slim.pt \
   --image ../private/Abyssinian_201.jpg --out /tmp/k1_ab_image.json
-cd ../FlagGems && python -m pytest tests/test_softmax.py -k 37_class_logits -q
+cd "$PETVISION_K1/FlagGems" && python -m pytest tests/test_softmax.py -k 37_class_logits -q
 ```
-
-预期：真图 Top-1 `Abyssinian`、p≈`0.997644`；`softmax_kernel_runs == 1`；
-单测 1 passed。
 
 ## 8. 验证范围
 
